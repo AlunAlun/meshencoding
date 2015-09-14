@@ -1,0 +1,90 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+
+<title>WebGL Hardware Blend Shapes Morph Targets</title>
+	<link href='https://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+	<link rel="stylesheet" type="text/css" href="css/reset.css" />
+	<link rel="stylesheet" type="text/css" href="css/style.css" />
+	<script type="text/javascript" src="js/extra/gl-matrix.js"></script>
+	<script type="text/javascript" src="js/extra/litegl.js"></script>
+	<script type="text/javascript" src="js/extra/dat.gui.min.js"></script>
+	<script type="text/javascript" src="js/extra/stats.min.js"></script>
+
+	<script type="text/javascript" src="js/utfmesh.js"></script>
+	<script type="text/javascript" src="js/MESHAPP.js"></script>
+
+</head>
+<body>
+<div id="wrap">
+	<div id="main">
+		<div id="content">
+			<div id="centerText">
+				<h1>Mesh Encoding for the Web</h1>
+				<p>Single mesh, 32-bit index buffer, 49 bits per vertex (71bpv with texture coords):</p>
+				<ul>
+					
+					<li>11-bit/channel precision for vertices</li>
+					<li>16-bit total for normals</li>
+					<li>11-bit/channel for textures (where necessary)</li>
+				</ul>
+				<h2>Stamford Bunny 4.9MB OBJ</h2>
+				<p><a href="index.html?file=assets/bunny/utf/bunny.json">UTF+gzip.</a>
+					 429kB. 70ms decompression.</p>
+				<h2>Happy Buddha 84MB OBJ</h2>
+				<p><a href="index.html?file=assets/buddha/utf/buddha.json">UTF+gzip.</a> 
+					5.3MB. 350ms decompression</p>
+				<h2>University of Surrey Campus 150MB OBJ</h2>
+				<p><a href="index.html?file=assets/pm01/utf/pm01.json">UTF+gzip.</a> 9.5MB. 500ms decompression</p>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div id="infoBox">
+
+<div>
+
+<script type="text/javascript">
+
+/*
+ * Simple function for extracting the url query parameters
+ */
+function getQueryParams(qs) {
+	qs = qs.split("+").join(" ");
+	var params = {}, tokens,
+	    re = /[?&]?([^=]+)=([^&]*)/g;
+	while (tokens = re.exec(qs)) {
+	    params[decodeURIComponent(tokens[1])]
+	        = decodeURIComponent(tokens[2]);
+	}
+	return params;
+}
+
+
+/*
+ * Init 3D stuffs
+ */
+var query = getQueryParams(document.location.search);
+
+if (query.file) {
+	document.getElementById("centerText").style.display = "none";
+	var marker = query.file.lastIndexOf('/');
+	var FILEPATH = query.file.substring(0, marker+1);
+	var FILENAME = query.file.substring(marker+1);
+	GL.loadFileAtlas("shaders/diffuseTexLargeMesh.sh", function(shader) {
+		MESHAPP.init(FILEPATH, FILENAME, shader.vertex, shader.fragment)
+	});
+}
+
+
+
+
+
+
+</script>
+</body>
+</html>
+
+

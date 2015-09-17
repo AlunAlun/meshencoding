@@ -65,6 +65,12 @@ namespace Geo {
     vector<int> quantizeVertexNormal_to_vec2(vec3 norm, int bits);
     vector<int> quantizeVertexTexture(vec2 coord, int bits);
     int getInterleavedUint(int val);
+    vec2 octEncode_8bit(vec3 v);
+    vec3 octDecode_8bit(vec2 v);
+    float clamp(float x, float a, float b);
+    float signNotZero(float value);
+    int toSNorm(float value);
+    float fromSNorm(int value);
 }
 
 #endif //C_EXPORT_GEOMETRY_H

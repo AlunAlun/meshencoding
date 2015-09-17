@@ -31,11 +31,13 @@ namespace Export {
             fputc(((code_point >> 6) & 0x3F) + 0x80, utfFile);
             fputc((code_point & 0x3F) + 0x80, utfFile);
         } else {
-            cout << "invalid code_point " << code_point << endl;
+            int bob = 0;
+            //cout << "invalid code_point " << code_point << endl;
         }
     }
 
-    void pushSafeInterleavedUTF(int delta, int interleaved, vector<int>& indices) {
+    int pushSafeInterleavedUTF(int delta, vector<int>& indices) {
+        int interleaved = Geo::getInterleavedUint(delta);
         if (interleaved >= 55295 && interleaved <= 57343) {
             if (delta < 0)
                 delta = delta + 14000;
@@ -43,9 +45,14 @@ namespace Export {
                 delta = delta - 14000;
             indices.push_back(55295);
             indices.push_back(Geo::getInterleavedUint(delta));
+            return 0; // we know that the stored value is less than 55295 to not four bytes
         }
-        else
+        else {
             indices.push_back(interleaved);
+            if (interleaved > 65535) return 1; // its a fourbyter
+            else return 0;
+        }
+
     }
 
     void pushSafeUTF(int value, vector<int>& indices) {
@@ -58,72 +65,7 @@ namespace Export {
             indices.push_back(value);
     }
 
-
-//    vec2 signNotZero(vec2 v) {
-//        return vec2((v.x >= 0.0f) ? +1.0f : -1.0f, (v.y >= 0.0f) ? +1.0f : -1.0f);
-//    }
-
-    float signNotZero(float value) {
-        return value < 0.0 ? -1.0 : 1.0;
-    }
-
-    inline float clamp(float x, float a, float b)
-    {
-        return x < a ? a : (x > b ? b : x);
-    }
-
-    int toSNorm(float value) {
-        return (int)round((clamp(value, -1.0, 1.0) * 0.5 + 0.5 ) * 255.0);
-    }
-
-    float fromSNorm(int value){
-        return clamp(value, 0.0, 255.0) / 255.0 * 2.0 - 1.0;
-    }
-
-    // Assume normalized input. Output is on [0, 255] for each component,
-    // representing -1.0 to +1.0;
-    vec2 octEncode_8bit(vec3 v) {
-        vec2 result = vec2(v.x / (abs(v.x) + abs(v.y) + abs(v.z)),
-                           v.y / (abs(v.x) + abs(v.y) + abs(v.z)));
-        if (v.z < 0) {
-            float x = result.x;
-            float y = result.y;
-            result = vec2( (1.0 - abs(y)) * signNotZero(x),
-                           (1.0 - abs(x)) * signNotZero(y) );
-
-        }
-        result = vec2(toSNorm(result.x), toSNorm(result.y));
-
-        return result;
-    }
-
-    vec3 octDecode_8bit(vec2 v) {
-        float rX = fromSNorm(v.x);
-        float rY = fromSNorm(v.y);
-        float rZ = 1.0 - (abs(rX) + abs(rY));
-
-        if (rZ < 0.0) {
-            float oldVX = rX;
-            rX = (1.0 - abs(rY)) * signNotZero(oldVX);
-            rY = (1.0 - abs(oldVX)) * signNotZero(rY);
-        }
-
-        return normalize(vec3(rX, rY, rZ));
-    }
-
-
-
-    void exportUTFMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bN, int bT) {
-
-        //http://jcgt.org/published/0003/02/01/paper-lowres.pdf
-        //https://cesiumjs.org/2015/05/18/Vertex-Compression/
-        //https://github.com/AnalyticalGraphicsInc/cesium/blob/master/Source/Core/AttributeCompression.js#L43
-        //https://github.com/AnalyticalGraphicsInc/cesium/blob/master/Source/Core/Math.js
-
-        vector<Vertex*> ORIGVERTICES;
-        map<Vertex, int> VERTICES_MAP;
-        vector<Vertex*> VERTICES;
-        vector<Face*> FACES;
+    void readOBJ(const string INFILEPATH, vector<Vertex*>& ORIGVERTICES, vector<int>& ORIGINDICES) {
 
         cout << "Reading files..." << endl;
 
@@ -140,92 +82,163 @@ namespace Export {
         //parse data into Vertex and Face lists
 
         tinyobj::mesh_t m = shapes[0].mesh;
+        int zeroNormals = 0;
         for (int i = 0; i < m.positions.size()/3; i++) {
             Vertex *newVertex = new Vertex(vec3(m.positions[i*3],m.positions[i*3+1],m.positions[i*3+2]));
             vec3 n = vec3(m.normals[i*3],m.normals[i*3+1],m.normals[i*3+2]);
             if (abs(n.x) == 0.0 && abs(n.y) == 0.0 && abs(n.z) == 0.0 ) {
                 n = vec3(0.0001, 0.0001, 0.0001);
-                printf("replace\n");
+                zeroNormals++;
             }
-
-             newVertex->normal = glm::normalize(n);
+            newVertex->normal = glm::normalize(n);
 
             if (m.texcoords.size() != 0)
                 newVertex->texture = vec2(m.texcoords[i*2],m.texcoords[i*2+1]);
             ORIGVERTICES.push_back(newVertex);
         }
+        printf("Replaced %d zeroed Normals\n", zeroNormals);
+        for (int i = 0; i < m.indices.size(); i++)
+            ORIGINDICES.push_back((int)m.indices[i]);
+    }
 
+    void generateQuantizedVertices(vector<Vertex*>& ORIGVERTICES, AABB* aabb, int bV, int bT, vector<Vertex*>& VERTICES) {
 
-        //get AABB
-        AABB* aabb = Geo::getAABB(ORIGVERTICES);
         //quantize everything
         for (int i = 0; i < ORIGVERTICES.size(); i++){
             Vertex * currVert = ORIGVERTICES[i];
-            vector<int> currPos = (vector<int>)Geo::quantizeVertexPosition(currVert->pos, aabb, bV);
+            vector<int> currPos = Geo::quantizeVertexPosition(currVert->pos, aabb, bV);
 
             Vertex *newVertex = new Vertex(vec3(currPos[0], currPos[1], currPos[2]));
-            newVertex->normal2 = octEncode_8bit(currVert->normal);
+            newVertex->normal2 = Geo::octEncode_8bit(currVert->normal);
 
-            vector<int> currCoords = (vector<int>)Geo::quantizeVertexTexture(currVert->texture, bT);
+            vector<int> currCoords = Geo::quantizeVertexTexture(currVert->texture, bT);
             newVertex->texture = vec2(currCoords[0],currCoords[1]);
             VERTICES.push_back(newVertex);
 
         }
+    }
 
-
-
-        cout << "Reindexing..." << endl;
-
+    void reIndexAccordingToIndices(vector<Vertex*>& quantizedVertices,
+                                   vector<int>& origIndices,
+                                   map<Vertex, int>& vertex_int_map,
+                                   vector<Vertex*>& FINAL_VERTICES,
+                                   vector<int>& FINAL_INDICES) {
         //reindex
         int newVertCounter = 0;
+
         std::map<Vertex, int>::iterator it;
 
-        //for each set of three indices
-        for (int i = 0; i < m.indices.size(); i+=3) {
+        //for each set of three original indices
+        for (int i = 0; i < origIndices.size(); i+=3) {
             //creat empty vector for new face indices
             vector<int> newFaceIndices;
             //loop through next three indices
             for (int j = 0; j < 3; j++) {
                 //get current index
-                int index = m.indices[i+j];
+                int index = origIndices[i+j];
                 //get vert referenced by pointer
-                Vertex vert = *VERTICES[index];
+                Vertex vert = *quantizedVertices[index];
                 //try to find vertex in map
-                it = VERTICES_MAP.find(vert);
+                it = vertex_int_map.find(vert);
                 //if its there, add the index to the newFaceindex list
-                if (it != VERTICES_MAP.end()) {
+                if (it != vertex_int_map.end()) {
                     newFaceIndices.push_back(it->second);
                 }
                     //otherwise, add size-1 of current map as index
                     //and add vert to map
                 else {
                     newFaceIndices.push_back(newVertCounter);
-                    VERTICES_MAP[vert] = newVertCounter;
+                    vertex_int_map[vert] = newVertCounter;
                     newVertCounter++; // now increment
                 }
             }
 
             Face *newFace = new Face(newFaceIndices[0], newFaceIndices[1], newFaceIndices[2]);
+            FINAL_INDICES.push_back(newFaceIndices[0]);
+            FINAL_INDICES.push_back(newFaceIndices[1]);
+            FINAL_INDICES.push_back(newFaceIndices[2]);
             if (newFaceIndices[0] < 0)
                 cout << newFaceIndices[0] << " " << newFaceIndices[1] << " " << newFaceIndices[2] << endl;
-            FACES.push_back(newFace);
-
-
+            //FACES.push_back(newFace);
         }
 
+        map<int, Vertex*> INT_VERTEX_MAP;
         //now flip the map
-        map<int, Vertex*> FLIPMAP;
-
-        for (auto itr = VERTICES_MAP.begin(); itr != VERTICES_MAP.end(); itr++) {
-            FLIPMAP[itr->second] = (Vertex*)&(itr->first);
+        for (auto itr = vertex_int_map.begin(); itr != vertex_int_map.end(); itr++) {
+            INT_VERTEX_MAP[itr->second] = (Vertex*)&(itr->first);
         }
 
-        cout << VERTICES.size() << endl;
-        cout << FLIPMAP.size() << endl;
+        for (int i; i < INT_VERTEX_MAP.size(); i++){
+            FINAL_VERTICES.push_back(INT_VERTEX_MAP[i]);
+        }
 
-        cout << "Compressing..." << endl;
+    }
 
-        //quantize and delta encode vertex positions
+    int encodeIndicesDelta(vector<int>& FINAL_INDICES, vector<int>& indices_to_write) {
+
+        float al = 0;
+        float un = 0;
+        int index = 0;
+        int fourByters = 0;
+        int previousIndex    = 0;
+        int toStore = 0;
+        for (int i = 0; i < FINAL_INDICES.size(); i++) {
+
+            index = FINAL_INDICES[i];
+
+            toStore = index-previousIndex;
+            previousIndex = index;
+            al+=abs(toStore);
+            un++;
+
+            fourByters += pushSafeInterleavedUTF(toStore, indices_to_write);
+        }
+
+        cout << "num fourbyters: " << fourByters << endl;
+
+        cout << "average store: " << (al/un) << endl;
+        return fourByters;
+    }
+
+    int encodeIndicesHighWater(vector<int>& FINAL_INDICES, vector<int>& indices_to_write) {
+        //hwm encode indices
+        float al = 0;
+        float un = 0;
+        int index = 0;
+        int fourByters = 0;
+        int nextHighWaterMark = 0;
+        int toStore = 0;
+        for (int i = 0; i < FINAL_INDICES.size(); i++) {
+
+            index = FINAL_INDICES[i];
+
+            toStore = (nextHighWaterMark-index);
+            al+=toStore;
+            un++;
+
+            if (toStore > 65535) //count the number of indices which need more than 16-bit to store
+                fourByters++;
+
+            pushSafeUTF(toStore, indices_to_write);
+
+            if (index == nextHighWaterMark)
+                nextHighWaterMark++;
+
+        }
+
+        cout << "num fourbyters: " << fourByters << endl;
+
+        cout << "average store: " << (al/un) << endl;
+
+        return fourByters;
+    }
+
+    void encodeAndWriteUTF(vector<Vertex*>& FINAL_VERTICES,
+                           vector<int>& FINAL_INDICES,
+                           int bV,
+                           int bT,
+                           const string OUT_ROOT,
+                           AABB* aabb) {
         vector<int> VTXPosX;
         vector<int> VTXPosY;
         vector<int> VTXPosZ;
@@ -234,78 +247,49 @@ namespace Export {
         vector<int> VTXCoordU;
         vector<int> VTXCoordV;
         int lastPosX = 0, lastPosY = 0, lastPosZ = 0,
-                lastNormX = 0, lastNormY = 0, lastNormZ = 0,
+                lastNormX = 0, lastNormY = 0,
                 lastCoordU = 0, lastCoordV = 0, delta = 0;
-        for (int i = 0; i < FLIPMAP.size(); i++) {
+        for (int i = 0; i < FINAL_VERTICES.size(); i++) {
 
-            Vertex * currVert = FLIPMAP[i];
+            Vertex * currVert = FINAL_VERTICES[i];
 
             vec3 currPos = currVert->pos;
             vec2 currNorm = currVert->normal2;
             vec2 currCoords = currVert->texture;
 
-
-            delta = (int)currPos.x - (int)lastPosX;
+            delta = (int)(currPos.x - lastPosX);
             lastPosX = (int)currPos.x;
             VTXPosX.push_back(Geo::getInterleavedUint(delta));
 
-            delta = (int)currPos.y - (int)lastPosY;
+            delta = (int)(currPos.y - lastPosY);
             lastPosY = (int)currPos.y;
             VTXPosY.push_back(Geo::getInterleavedUint(delta));
 
-            delta = (int)currPos.z - (int)lastPosZ;
+            delta = (int)(currPos.z - lastPosZ);
             lastPosZ = (int)currPos.z;
             VTXPosZ.push_back(Geo::getInterleavedUint(delta));
 
-            delta = (int)currNorm.x - (int)lastNormX;
+            delta = (int)(currNorm.x - lastNormX);
             lastNormX = (int)currNorm.x;
             VTXNormX.push_back(Geo::getInterleavedUint(delta));
 
-            delta = (int)currNorm.y - (int)lastNormY;
+            delta = (int)(currNorm.y - lastNormY);
             lastNormY = (int)currNorm.y;
             VTXNormY.push_back(Geo::getInterleavedUint(delta));
 
             if (bT > 0) {
-                delta = (int)currCoords.x - (int)lastCoordU;
+                delta = (int)(currCoords.x - lastCoordU);
                 lastCoordU = (int)currCoords.x;
                 VTXCoordU.push_back(Geo::getInterleavedUint(delta));
 
-                delta = (int)currCoords.y - (int)lastCoordV;
+                delta = (int)(currCoords.y - lastCoordV);
                 lastCoordV = (int)currCoords.y;
                 VTXCoordV.push_back(Geo::getInterleavedUint(delta));
             }
         }
 
-        //delta encode indices
-        vector<int> indices;
-        int lastIndex = 0, index = 0, interleaved = 0;
-        delta = 0;
-        int fourByters = 0;
-        int nextHighWaterMark = 0;
-        int toStore = 0;
-        for (int i = 0; i < FACES.size(); i++) {
-            for (int j = 0; j < FACES[i]->indices.size(); j++) {
-
-                index = FACES[i]->indices[j];
-                toStore = (nextHighWaterMark-index);
-                if (toStore > 65535) //count the number of indices which need more than 16-bit to store
-                    fourByters++;
-
-
-                pushSafeUTF(toStore, indices);
-
-                if (index == nextHighWaterMark)
-                    nextHighWaterMark++;
-
-
-
-            }
-
-        }
-        cout << fourByters << endl;
-        cout << indices.size() << endl;
-
-
+        vector<int> indices_to_write;
+        int fourByters = encodeIndicesHighWater(FINAL_INDICES, indices_to_write);
 
         //write files
         cout << "Writing files..." << endl;
@@ -316,12 +300,15 @@ namespace Export {
         utfFile = fopen (outUTF8Name.c_str(),"w");
         if (utfFile!=NULL) {
             for (int i = 0; i < VTXPosX.size(); i++) {
+                int bob = VTXPosX[i];
                 write_utf8(VTXPosX[i], utfFile);
             }
             for (int i = 0; i < VTXPosY.size(); i++) {
+                int bob = VTXPosX[i];
                 write_utf8(VTXPosY[i], utfFile);
             }
             for (int i = 0; i < VTXPosZ.size(); i++) {
+                int bob = VTXPosZ[i];
                 write_utf8(VTXPosZ[i], utfFile);
             }
 
@@ -338,8 +325,8 @@ namespace Export {
             for (int i = 0; i < VTXCoordV.size(); i++) {
                 write_utf8(VTXCoordV[i], utfFile);
             }
-            for (int i = 0; i < indices.size(); i++) {
-                write_utf8(indices[i], utfFile);
+            for (int i = 0; i < indices_to_write.size(); i++) {
+                write_utf8(indices_to_write[i], utfFile);
             }
             fclose (utfFile);
 
@@ -356,14 +343,14 @@ namespace Export {
         json lodArray(json::an_array);
 
         json currLod;
-        currLod["vertices"] = int(FLIPMAP.size());
-        currLod["faces"] = int(FACES.size());
-        currLod["utfIndexBuffer"] = int(indices.size())+fourByters; //add number of 3 or 4 byte indices for utf parsing
+        currLod["vertices"] = int(FINAL_VERTICES.size());
+        currLod["faces"] = int(FINAL_INDICES.size()/3);
+        currLod["utfIndexBuffer"] = int(indices_to_write.size())+fourByters; //add number of 3 or 4 byte indices for utf parsing
 
         json currBits;
-        currBits["vertex"] = int(bV);
-        currBits["normal"] = int(bN);
-        currBits["texture"] = int(bT);
+        currBits["vertex"] = bV;
+        currBits["normal"] = 8;
+        currBits["texture"] = bT;
         currLod["bits"] = move(currBits);
         lodArray.add(currLod);
 
@@ -389,12 +376,56 @@ namespace Export {
         jsonFile.open (OUT_ROOT + ".json");
         jsonFile << metadata;
         jsonFile.close();
+    }
+
+
+    void exportUTFMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT) {
+
+
+
+        vector<Vertex*> quantizedVertices;
+
+        //read OBJ file
+        vector<Vertex*> origVertices;
+        vector<int> origIndices;
+        readOBJ(INFILEPATH, origVertices, origIndices);
+
+        int* tip = (int*)tipsify(&origIndices[0], origIndices.size()/3, origVertices.size(), 100);
+
+        vector<int> tips_indices(tip, tip+origIndices.size());
+
+        //get AABB
+        AABB* aabb = Geo::getAABB(origVertices);
+
+        //quantize
+        generateQuantizedVertices(origVertices, aabb, bV, bT, quantizedVertices);
+
+
+
+        map<Vertex, int> vertex_int_map;
+        vector<Vertex*> FINAL_VERTICES;
+        vector<int> FINAL_INDICES;
+
+        cout << "Reindexing..." << endl;
+        reIndexAccordingToIndices(quantizedVertices, tips_indices, vertex_int_map, FINAL_VERTICES, FINAL_INDICES);
+
+
+
+//        for (int i = 0; i < 100; i++) {
+//            printf("%d, %d\n", FINAL_INDICES[i], TIPS_INDICES[i]);
+//        }
+
+
+        cout << "Compressing..." << endl;
+        encodeAndWriteUTF(FINAL_VERTICES, FINAL_INDICES, bV, bT, OUT_ROOT, aabb);
+
+
 
     }
 
 
 
-
+/*
 
 
     vector<unsigned int> loadAndQuantize(const string INFILEPATH,
@@ -660,4 +691,9 @@ namespace Export {
 
 
     }
+
+
+
+    */
 }
+

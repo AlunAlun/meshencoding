@@ -71,7 +71,7 @@ void main() {
 precision highp float;
 uniform vec3 u_lightPosition;
 uniform vec3 u_materialColor;
-uniform sampler2D u_colorTexture;
+uniform sampler2D u_diffuse_texture;
 uniform float u_wTexture;
 varying vec3 v_worldNormalDirection;
 varying vec3 v_worldVertexPosition;
@@ -82,7 +82,7 @@ void main() {
 	vec3 N = normalize(v_worldNormalDirection);
 	float NdotL = max(0.0, dot(L,N));
 	//vec3 diffuseColor = u_materialColor * texture2D(u_blendVertexTexture, v_coord).xyz * NdotL;
-	vec4 texColor = texture2D(u_colorTexture, v_coord);
+	vec4 texColor = texture2D(u_diffuse_texture, v_coord);
 	vec3 diffuseColor = u_materialColor * texColor.xyz * NdotL;
 
 	gl_FragColor = vec4(diffuseColor,1.0)+vec4(0.1, 0.1,0.1, 1.0);

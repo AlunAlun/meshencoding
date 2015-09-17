@@ -16,10 +16,10 @@ using namespace glm;
 
 int main(int argc, char *argv[]) {
 
-    const string INFILEPATH = "/Users/alun/Dropbox/Work/Code/Projects/meshencoding/c_export/assets/bunny.obj";
-    const string OUT_ROOT = "bunny";
+    const string INFILEPATH = "/Users/alunevans/Dropbox/Work/Code/Projects/meshencoding/c_export/assets/pm01-m.obj";
+    const string OUT_ROOT = "pm01";
 
-    Export::exportUTFMesh(INFILEPATH, OUT_ROOT, 11, 8, 0);
+    Export::exportUTFMesh(INFILEPATH, OUT_ROOT, 11, 11);
     //Export::exportPNGMesh(INFILEPATH, OUT_ROOT);
 
     cout << "done!" << endl;

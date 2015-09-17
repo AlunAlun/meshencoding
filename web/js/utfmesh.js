@@ -37,12 +37,18 @@ UTFMesh.prototype.startLoad = function(filename, callback) {
 
 			//initialise material if it should have one
 			this.material = {};
-			if (this.meta.material && this.meta.material.diffuse_texture) {
-				this.material.diffuseTexture = GL.Texture.fromURL(this.filepath+this.meta.material.diffuse_texture,
+			this.material.diffuse_texture = GL.Texture.fromURL("./assets/white.jpg");
+			if (this.meta.material) {
+				if (this.meta.material.diffuse_texture) {
+					this.material.diffuse_texture = GL.Texture.fromURL(this.filepath+this.meta.material.diffuse_texture,
 												{temp_color:[255,255,255,255], minFilter: gl.LINEAR_MIPMAP_LINEAR});
+				}
+				if (this.meta.material.displacement_texture) {
+					this.material.displacement_texture = GL.Texture.fromURL(this.filepath+this.meta.material.displacement_texture,
+												{temp_color:[0,0,0,255], minFilter: gl.LINEAR_MIPMAP_LINEAR});
+				}
 			}
-			else 
-				this.material.diffuseTexture = GL.Texture.fromURL("./assets/white.jpg");
+			
 
 			this.loadData();
 
@@ -186,7 +192,7 @@ UTFMesh.prototype.parseUTFData = function(data) {
 	lastIndex = 0;
 	nextHighWaterMark = 0;
 	triCounter = 0;
-	var delta = 0;
+	var prev = 0;
 	console.log("-");
 
 	for (var i = 0; i < utfIndexBuffer; i++) //utfIndexBuffer
@@ -198,6 +204,11 @@ UTFMesh.prototype.parseUTFData = function(data) {
 		newBuffers.triangles[triCounter++] = nextHighWaterMark - code;
 		if (code === 0)
 			nextHighWaterMark++;
+
+		//delta
+		//prev += this.decodeSafeInterleavedUTF(indexArray, i);
+		//newBuffers.triangles[triCounter++] = prev;
+
 	}
 
 	console.log("set inds: "+(performance.now()-tStart));
@@ -290,8 +301,10 @@ UTFMesh.prototype.draw = function(view, proj, light_pos) {
 	mat4.toRotationMat4(this.modelt, this.model);
 
 	if (this.material){
-		if (this.material.diffuseTexture)
-			this.material.diffuseTexture.bind(2);
+		if (this.material.diffuse_texture)
+			this.material.diffuse_texture.bind(2);
+		if (this.material.displacement_texture) 
+			this.material.displacement_texture.bind(3);
 	}
 
 	this.shader.uniforms({
@@ -300,7 +313,8 @@ UTFMesh.prototype.draw = function(view, proj, light_pos) {
 		u_mvp: this.mvp,
 		u_lightPosition: light_pos,
 		u_materialColor: [1,1,1],
-		u_colorTexture: 2,
+		u_diffuse_texture: 2,
+		u_displacement_Texture: 2,
 		u_wVertex: this.meta.wValues.vertex,
 		u_wNormal: this.meta.wValues.normal,
 		u_wTexture: this.meta.wValues.texture,

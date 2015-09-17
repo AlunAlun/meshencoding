@@ -105,4 +105,56 @@ namespace Geo {
         else
             return ((val - 1) * 2) + 1;
     }
+
+    float clamp(float x, float a, float b)
+    {
+        return x < a ? a : (x > b ? b : x);
+    }
+
+    float signNotZero(float value) {
+        return value < 0.0 ? -1.0 : 1.0;
+    }
+
+    int toSNorm(float value) {
+        return (int)round((clamp(value, -1.0, 1.0) * 0.5 + 0.5 ) * 255.0);
+    }
+
+    float fromSNorm(int value){
+        return clamp(value, 0.0, 255.0) / 255.0 * 2.0 - 1.0;
+    }
+
+    // Assume normalized input. Output is on [0, 255] for each component,
+    // representing -1.0 to +1.0;
+    vec2 octEncode_8bit(vec3 v) {
+        vec2 result = vec2(v.x / (abs(v.x) + abs(v.y) + abs(v.z)),
+                           v.y / (abs(v.x) + abs(v.y) + abs(v.z)));
+        if (v.z < 0) {
+            float x = result.x;
+            float y = result.y;
+            result = vec2( (1.0 - abs(y)) * signNotZero(x),
+                           (1.0 - abs(x)) * signNotZero(y) );
+
+        }
+        result = vec2(toSNorm(result.x), toSNorm(result.y));
+
+        return result;
+    }
+
+    //http://jcgt.org/published/0003/02/01/paper-lowres.pdf
+    //https://cesiumjs.org/2015/05/18/Vertex-Compression/
+    //https://github.com/AnalyticalGraphicsInc/cesium/blob/master/Source/Core/AttributeCompression.js#L43
+    //https://github.com/AnalyticalGraphicsInc/cesium/blob/master/Source/Core/Math.js
+    vec3 octDecode_8bit(vec2 v) {
+        float rX = fromSNorm(v.x);
+        float rY = fromSNorm(v.y);
+        float rZ = 1.0 - (abs(rX) + abs(rY));
+
+        if (rZ < 0.0) {
+            float oldVX = rX;
+            rX = (1.0 - abs(rY)) * signNotZero(oldVX);
+            rY = (1.0 - abs(oldVX)) * signNotZero(rY);
+        }
+
+        return normalize(vec3(rX, rY, rZ));
+    }
 }

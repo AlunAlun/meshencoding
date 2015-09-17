@@ -28,7 +28,7 @@ using namespace std;
 using namespace glm;
 
 namespace Export {
-    void exportUTFMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bN, int bT);
+    void exportUTFMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT);
     void exportPNGMesh(const string INFILEPATH, const string OUT_ROOT);
 }
 

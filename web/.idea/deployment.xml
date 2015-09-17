@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="On explicit save action" serverName="alunevans.info" stopOnFirstError="true" exclude=".svn;.cvs;.idea;.DS_Store;.git;.hg;sftp-config.json">
+    <serverData>
+      <paths name="alunevans.info">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/wip/meshencode" local="$PROJECT_DIR$" web="/wip/meshencode" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ON_EXPLICIT_SAVE" />
+  </component>
+</project>

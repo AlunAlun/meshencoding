@@ -16,11 +16,11 @@ using namespace glm;
 
 int main(int argc, char *argv[]) {
 
-    const string INFILEPATH = "/Users/alunevans/Dropbox/Work/Code/Projects/meshencoding/c_export/assets/pm01-m.obj";
-    const string OUT_ROOT = "pm01";
+    const string INFILEPATH = "/Users/alun/Dropbox/Work/Code/Projects/meshencoding/c_export/assets/buddha.obj";
+    const string OUT_ROOT = "buddhatestonlyinds";
 
-    Export::exportUTFMesh(INFILEPATH, OUT_ROOT, 11, 11);
-    //Export::exportPNGMesh(INFILEPATH, OUT_ROOT);
+    Export::exportMesh(INFILEPATH, OUT_ROOT, 11, 0, MeshEncoding::UTF, IndexCoding::HIGHWATER, IndexCompression::PAIRED_TRIS);
+
 
     cout << "done!" << endl;
     return 0;

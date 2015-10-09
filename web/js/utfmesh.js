@@ -1,4 +1,4 @@
-//works with 15d-15d-16d-16d-a
+
 function UTFMesh(vsCode, fsCode, texSize){
 	this.vertShaderCode = vsCode;
 	this.fragShaderCode = fsCode;
@@ -100,7 +100,7 @@ UTFMesh.prototype.parseUTFData = function(data) {
 	var vertCoordsV = new Uint16Array(currNumVerts);
 	var indexArray = new Uint32Array(utfIndexBuffer);
 
-	for (var i = 0; i < currNumVerts; i++) {vertIntsX[i] = data.charCodeAt(offset);offset++}
+	for (var i = 0; i < currNumVerts; i++) {vertIntsX[i] = data.charCodeAt(offset);offset++;}
 	for (var i = 0; i < currNumVerts; i++) {vertIntsY[i] = data.charCodeAt(offset);offset++}
 	for (var i = 0; i < currNumVerts; i++) {vertIntsZ[i] = data.charCodeAt(offset);offset++}
 	for (var i = 0; i < currNumVerts; i++) {vertNormsX[i] = data.charCodeAt(offset);offset++}
@@ -190,26 +190,69 @@ UTFMesh.prototype.parseUTFData = function(data) {
 	console.log(utfIndexBuffer);
 
 	lastIndex = 0;
-	nextHighWaterMark = 0;
+
+    if (!this.meta.max_step)
+        this.meta.max_step = 1;
+    nextHighWaterMark = this.meta.max_step - 1;
+    hi = this.meta.max_step - 1;
 	triCounter = 0;
 	var prev = 0;
 	console.log("-");
 
 	for (var i = 0; i < utfIndexBuffer; i++) //utfIndexBuffer
 	{
-		//highwatermark
-		var result = this.decodeSafeUTF(indexArray, i);
-		var code = result.value; i = result.i;
+		if (this.meta.indexCoding == "delta") {
+			//delta decoding
+			var result = this.decodeSafeInterleavedUTF(indexArray, i);
+			prev += result.delta;
+			i = result.i;
+			newBuffers.triangles[triCounter++] = prev;
+		}
+		else {
+			//highwatermark
+            var result = this.decodeSafeUTF(indexArray, i);
+            var v = result.value;
+            i = result.i;
 
-		newBuffers.triangles[triCounter++] = nextHighWaterMark - code;
-		if (code === 0)
-			nextHighWaterMark++;
+            //assert(v <=hi)
+            v = hi - v;
+            newBuffers.triangles[triCounter++] = v;
+            hi = Math.max(hi, v + this.meta.max_step);
 
-		//delta
-		//prev += this.decodeSafeInterleavedUTF(indexArray, i);
-		//newBuffers.triangles[triCounter++] = prev;
 
+
+			//var result = this.decodeSafeUTF(indexArray, i);
+            //var code = result.value;
+            //i = result.i;
+            //
+            //newBuffers.triangles[triCounter++] = nextHighWaterMark - code;
+            //if (code === 0)
+            //	nextHighWaterMark+=this.meta.max_step;
+		}
 	}
+
+    if (this.meta.indexCompression == "pairedtris") {
+        newArray = new Uint32Array(utfIndexBuffer*1.5);
+        var nACounter = 0;
+        for (var base = 0; base < newBuffers.triangles.length;) {
+            var a = newBuffers.triangles[base++];
+            var b = newBuffers.triangles[base++];
+            var c = newBuffers.triangles[base++];
+            newArray[nACounter++] = a;
+            newArray[nACounter++] = b;
+            newArray[nACounter++] = c;
+
+            if (a < b) {
+                var d = newBuffers.triangles[base++];
+                newArray[nACounter++] = a;
+                newArray[nACounter++] = d;
+                newArray[nACounter++] = b;
+            }
+        }
+        newBuffers.triangles = newArray;
+    }
+
+
 
 	console.log("set inds: "+(performance.now()-tStart));
 

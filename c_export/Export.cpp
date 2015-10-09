@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "tipsify.cpp"
+#include "forsyth.cpp"
 #include "tiny_obj_loader.h"
 
 #define EPSILON 0.0001
@@ -36,7 +37,7 @@ namespace Export {
         }
     }
 
-    int pushSafeInterleavedUTF(int delta, vector<int>& indices) {
+    int pushSafeInterleavedUTF(int delta, vector<u_int_32>& indices) {
         int interleaved = Geo::getInterleavedUint(delta);
         if (interleaved >= 55295 && interleaved <= 57343) {
             if (delta < 0)
@@ -55,7 +56,7 @@ namespace Export {
 
     }
 
-    void pushSafeUTF(int value, vector<int>& indices) {
+    void pushSafeUTF(int value, vector<u_int_32>& indices) {
         if (value >= 55295 && value <= 57343) {
             value -= 14000;
             indices.push_back(55295);
@@ -122,7 +123,7 @@ namespace Export {
                                    vector<int>& origIndices,
                                    map<Vertex, int>& vertex_int_map,
                                    vector<Vertex*>& FINAL_VERTICES,
-                                   vector<int>& FINAL_INDICES) {
+                                   vector<int>& indices_out) {
         //reindex
         int newVertCounter = 0;
 
@@ -154,9 +155,9 @@ namespace Export {
             }
 
             Face *newFace = new Face(newFaceIndices[0], newFaceIndices[1], newFaceIndices[2]);
-            FINAL_INDICES.push_back(newFaceIndices[0]);
-            FINAL_INDICES.push_back(newFaceIndices[1]);
-            FINAL_INDICES.push_back(newFaceIndices[2]);
+            indices_out.push_back(newFaceIndices[0]);
+            indices_out.push_back(newFaceIndices[1]);
+            indices_out.push_back(newFaceIndices[2]);
             if (newFaceIndices[0] < 0)
                 cout << newFaceIndices[0] << " " << newFaceIndices[1] << " " << newFaceIndices[2] << endl;
             //FACES.push_back(newFace);
@@ -174,7 +175,87 @@ namespace Export {
 
     }
 
-    int encodeIndicesDelta(vector<int>& FINAL_INDICES, vector<int>& indices_to_write) {
+    void add_tri(std::vector<int>& out_inds, int a, int b, int c)
+    {
+        assert(a >= b);
+        out_inds.push_back(a);
+        out_inds.push_back(b);
+        out_inds.push_back(c);
+    }
+
+    void add_double_tri(std::vector<int>& out_inds, int a, int b, int c, int d)
+    {
+        assert(a < b);
+        out_inds.push_back(a);
+        out_inds.push_back(b);
+        out_inds.push_back(c);
+        out_inds.push_back(d);
+    }
+
+    bool try_merge_with_next(std::vector<int>& out_inds, const std::vector<int>& inds, size_t base)
+    {
+        // is there even a next tri?
+        if (base + 3 >= inds.size())
+            return false;
+
+        // is this tri degenerate?
+        const int *tri = &inds[base];
+        if (tri[0] == tri[1] || tri[1] == tri[2] || tri[2] == tri[0])
+            return false;
+
+        // does the next tri contain the opposite of at least one
+        // of our edges?
+        const int *next = &inds[base + 3];
+
+        // go through 3 edges of tri
+        for (int i = 0; i < 3; i++)
+        {
+            // try to find opposite of edge ab, namely ba.
+            int a = tri[i];
+            int b = tri[(i + 1) % 3];
+            int c = tri[(i + 2) % 3];
+
+            for (int j = 0; j < 3; j++)
+            {
+                if (next[j] == b && next[(j + 1) % 3] == a)
+                {
+                    int d = next[(j + 2) % 3];
+
+                    if (a < b)
+                        add_double_tri(out_inds, a, b, c, d);
+                    else // must be c > a, since we checked that a != c above; this ends up swapping two tris.
+                        add_double_tri(out_inds, b, a, d, c);
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    void compressIndexBuffer(vector<int>& inds_in, vector<int>&inds_out) {
+        for (size_t base = 0; base < inds_in.size(); ) {
+            if (try_merge_with_next(inds_out, inds_in, base))
+                base += 6; // packed two triangles
+            else {
+                const int *tri = &inds_in[base];
+                if (tri[0] >= tri[1])
+                    add_tri(inds_out, tri[0], tri[1], tri[2]);
+                else if (tri[1] >= tri[2])
+                    add_tri(inds_out, tri[1], tri[2], tri[0]);
+                else
+                {
+                    // must have tri[2] >= tri[0],
+                    // otherwise we'd have tri[0] < tri[1] < tri[2] < tri[0] (contradiction)
+                    add_tri(inds_out, tri[2], tri[0], tri[1]);
+                }
+                base += 3;
+            }
+        }
+    }
+
+    int encodeIndicesDelta(vector<int>& FINAL_INDICES, vector<u_int_32>& indices_to_write) {
 
         float al = 0;
         float un = 0;
@@ -200,151 +281,184 @@ namespace Export {
         return fourByters;
     }
 
-    int encodeIndicesHighWater(vector<int>& FINAL_INDICES, vector<int>& indices_to_write) {
+    int encodeIndicesHighWater(vector<int>& FINAL_INDICES, vector<u_int_32>& indices_to_write, int max_step, bool utfSafe) {
         //hwm encode indices
         float al = 0;
         float un = 0;
-        int index = 0;
         int fourByters = 0;
-        int nextHighWaterMark = 0;
-        int toStore = 0;
-        for (int i = 0; i < FINAL_INDICES.size(); i++) {
 
-            index = FINAL_INDICES[i];
+        int toStore = 0; int hi = max_step-1; int index = 0;
 
-            toStore = (nextHighWaterMark-index);
-            al+=toStore;
+        int maxStore = 0;
+        for (int v : FINAL_INDICES) {
+
+            assert(v <= hi);
+
+            toStore = (hi - v);
+            al += toStore;
             un++;
 
-            if (toStore > 65535) //count the number of indices which need more than 16-bit to store
-                fourByters++;
+            if (utfSafe == true) { // add hack to overcome the limitations of utf
+                if (toStore > 65535) //count the number of indices which need more than 16-bit to store
+                    fourByters++;
 
-            pushSafeUTF(toStore, indices_to_write);
+                pushSafeUTF(toStore, indices_to_write);
+            }
+            else
+                indices_to_write.push_back(toStore); // if we aren't using utf, just push the high water mark
 
-            if (index == nextHighWaterMark)
-                nextHighWaterMark++;
+            hi = std::max(hi, v + max_step);
+
+            if (toStore > maxStore)
+                maxStore = toStore;
+
 
         }
 
-        cout << "num fourbyters: " << fourByters << endl;
 
+        cout << "max store: " << maxStore << endl;
+        cout << "num fourbyters: " << fourByters << endl;
         cout << "average store: " << (al/un) << endl;
 
         return fourByters;
     }
 
-    void encodeAndWriteUTF(vector<Vertex*>& FINAL_VERTICES,
-                           vector<int>& FINAL_INDICES,
-                           int bV,
-                           int bT,
-                           const string OUT_ROOT,
-                           AABB* aabb) {
-        vector<int> VTXPosX;
-        vector<int> VTXPosY;
-        vector<int> VTXPosZ;
-        vector<int> VTXNormX;
-        vector<int> VTXNormY;
-        vector<int> VTXCoordU;
-        vector<int> VTXCoordV;
+    void deltaEncodeVertices(vector<Vertex*>& FINAL_VERTICES, vector<int>& VTXDelta, int bT) {
         int lastPosX = 0, lastPosY = 0, lastPosZ = 0,
                 lastNormX = 0, lastNormY = 0,
                 lastCoordU = 0, lastCoordV = 0, delta = 0;
+
         for (int i = 0; i < FINAL_VERTICES.size(); i++) {
-
-            Vertex * currVert = FINAL_VERTICES[i];
-
-            vec3 currPos = currVert->pos;
-            vec2 currNorm = currVert->normal2;
-            vec2 currCoords = currVert->texture;
-
-            delta = (int)(currPos.x - lastPosX);
-            lastPosX = (int)currPos.x;
-            VTXPosX.push_back(Geo::getInterleavedUint(delta));
-
-            delta = (int)(currPos.y - lastPosY);
-            lastPosY = (int)currPos.y;
-            VTXPosY.push_back(Geo::getInterleavedUint(delta));
-
-            delta = (int)(currPos.z - lastPosZ);
-            lastPosZ = (int)currPos.z;
-            VTXPosZ.push_back(Geo::getInterleavedUint(delta));
-
-            delta = (int)(currNorm.x - lastNormX);
-            lastNormX = (int)currNorm.x;
-            VTXNormX.push_back(Geo::getInterleavedUint(delta));
-
-            delta = (int)(currNorm.y - lastNormY);
-            lastNormY = (int)currNorm.y;
-            VTXNormY.push_back(Geo::getInterleavedUint(delta));
-
-            if (bT > 0) {
-                delta = (int)(currCoords.x - lastCoordU);
-                lastCoordU = (int)currCoords.x;
-                VTXCoordU.push_back(Geo::getInterleavedUint(delta));
-
-                delta = (int)(currCoords.y - lastCoordV);
-                lastCoordV = (int)currCoords.y;
-                VTXCoordV.push_back(Geo::getInterleavedUint(delta));
+            delta = (int)(FINAL_VERTICES[i]->pos.x - lastPosX);
+            lastPosX = (int)(FINAL_VERTICES[i]->pos.x);
+            VTXDelta.push_back(Geo::getInterleavedUint(delta));
+        }
+        for (int i = 0; i < FINAL_VERTICES.size(); i++) {
+            delta = (int)(FINAL_VERTICES[i]->pos.y - lastPosY);
+            lastPosY = (int)(FINAL_VERTICES[i]->pos.y);
+            VTXDelta.push_back(Geo::getInterleavedUint(delta));
+        }
+        for (int i = 0; i < FINAL_VERTICES.size(); i++) {
+            delta = (int)(FINAL_VERTICES[i]->pos.z - lastPosZ);
+            lastPosZ = (int)(FINAL_VERTICES[i]->pos.z);
+            VTXDelta.push_back(Geo::getInterleavedUint(delta));
+        }
+        for (int i = 0; i < FINAL_VERTICES.size(); i++) {
+            delta = (int)(FINAL_VERTICES[i]->normal2.x - lastNormX);
+            lastNormX = (int)(FINAL_VERTICES[i]->normal2.x);
+            VTXDelta.push_back(Geo::getInterleavedUint(delta));
+        }
+        for (int i = 0; i < FINAL_VERTICES.size(); i++) {
+            delta = (int)(FINAL_VERTICES[i]->normal2.y - lastNormY);
+            lastNormY = (int)(FINAL_VERTICES[i]->normal2.y);
+            VTXDelta.push_back(Geo::getInterleavedUint(delta));
+        }
+        if (bT > 0) {
+            for (int i = 0; i < FINAL_VERTICES.size(); i++) {
+                delta = (int)(FINAL_VERTICES[i]->texture.x - lastCoordU);
+                lastCoordU = (int)(FINAL_VERTICES[i]->texture.x);
+                VTXDelta.push_back(Geo::getInterleavedUint(delta));
+            }
+            for (int i = 0; i < FINAL_VERTICES.size(); i++) {
+                delta = (int)(FINAL_VERTICES[i]->texture.y - lastCoordV);
+                lastCoordV = (int)(FINAL_VERTICES[i]->texture.y);
+                VTXDelta.push_back(Geo::getInterleavedUint(delta));
             }
         }
+    }
 
-        vector<int> indices_to_write;
-        int fourByters = encodeIndicesHighWater(FINAL_INDICES, indices_to_write);
-
+    void writeDataUTF(vector<int>& vertices_to_write,
+                      vector<u_int_32>& indices_to_write,
+                      const string OUT_ROOT,
+                      IndexCoding indCoding) {
         //write files
-        cout << "Writing files..." << endl;
+        cout << "Writing data..." << endl;
 
         //first write utfFile (in order to get it's size for JSON
         FILE * utfFile;
         string outUTF8Name = OUT_ROOT + ".utf8";
         utfFile = fopen (outUTF8Name.c_str(),"w");
         if (utfFile!=NULL) {
-            for (int i = 0; i < VTXPosX.size(); i++) {
-                int bob = VTXPosX[i];
-                write_utf8(VTXPosX[i], utfFile);
-            }
-            for (int i = 0; i < VTXPosY.size(); i++) {
-                int bob = VTXPosX[i];
-                write_utf8(VTXPosY[i], utfFile);
-            }
-            for (int i = 0; i < VTXPosZ.size(); i++) {
-                int bob = VTXPosZ[i];
-                write_utf8(VTXPosZ[i], utfFile);
+            for (int i = 0; i < vertices_to_write.size(); i++) {
+
+                //write_utf8(vertices_to_write[i], utfFile);
             }
 
-            for (int i = 0; i < VTXNormX.size(); i++) {
-                write_utf8(VTXNormX[i], utfFile);
-            }
-            for (int i = 0; i < VTXNormY.size(); i++) {
-                write_utf8(VTXNormY[i], utfFile);
-            }
-
-            for (int i = 0; i < VTXCoordU.size(); i++) {
-                write_utf8(VTXCoordU[i], utfFile);
-            }
-            for (int i = 0; i < VTXCoordV.size(); i++) {
-                write_utf8(VTXCoordV[i], utfFile);
-            }
             for (int i = 0; i < indices_to_write.size(); i++) {
                 write_utf8(indices_to_write[i], utfFile);
             }
+
             fclose (utfFile);
 
 
         }
 
-
         struct stat filestatus;
         stat( outUTF8Name.c_str(), &filestatus );
         cout << int(filestatus.st_size)/1000 << " bytes\n";
+    }
 
+
+    void writeDataPNG(vector<int>& vertices_to_write,
+                    vector<u_int_32>& indices_to_write,
+                    const string OUT_ROOT,
+                    IndexCoding indCoding) {
+
+        const int IMAGE_RESOLUTION = 4096;
+
+        png::image< png::rgb_pixel > imagei(IMAGE_RESOLUTION, IMAGE_RESOLUTION);
+
+        int vCounter = 0;
+        int iCounter = 0;
+
+        for (size_t y = 0; y < imagei.get_height(); ++y) {
+            for (size_t x = 0; x < imagei.get_width(); ++x) {
+
+                if (vCounter < vertices_to_write.size()){
+                    unsigned int quantVal = vertices_to_write[vCounter++];
+
+                    int r = (quantVal & 0x00FF0000) >> 16;
+                    int g = (quantVal & 0x0000FF00) >> 8;
+                    int b = (quantVal & 0x000000FF);
+                    imagei[y][x] = png::rgb_pixel(r, g, b);
+
+                }
+                else if (iCounter < indices_to_write.size()){
+
+                    unsigned int quantVal = indices_to_write[iCounter++];
+                    int r = (quantVal & 0x00FF0000) >> 16;
+                    int g = (quantVal & 0x0000FF00) >> 8;
+                    int b = (quantVal & 0x000000FF);
+                    imagei[y][x] = png::rgb_pixel(r, g, b);
+                }
+
+            }
+        }
+        imagei.write(OUT_ROOT + ".png");
+
+    }
+
+
+    void writeHeader(vector<int>& vertices_to_write,
+                     vector<u_int_32>& indices_to_write,
+                     int numVerts,
+                     int numFaces,
+                     int bV,
+                     int bT,
+                     int fourByters,
+                     const string OUT_ROOT,
+                     AABB* aabb,
+                     MeshEncoding coding,
+                     IndexCoding indCoding,
+                     IndexCompression indCompression,
+                     int max_hw_step) {
 
         json metadata;
         json lodArray(json::an_array);
 
         json currLod;
-        currLod["vertices"] = int(FINAL_VERTICES.size());
-        currLod["faces"] = int(FINAL_INDICES.size()/3);
+        currLod["vertices"] = numVerts;
+        currLod["faces"] = numFaces;
         currLod["utfIndexBuffer"] = int(indices_to_write.size())+fourByters; //add number of 3 or 4 byte indices for utf parsing
 
         json currBits;
@@ -367,11 +481,40 @@ namespace Export {
         headerAABBRange.add((double)aabb->range[2]);
         headerAABB["range"] = move(headerAABBRange);
         headerAABB["min"] = move(headerAABBMin);
-
         metadata["AABB"] = move(headerAABB);
-        metadata["data"] = outUTF8Name;
-        metadata["size"] = int(filestatus.st_size)/1000;
 
+        if (indCompression == IndexCompression::PAIRED_TRIS)
+            metadata["indexCompression"] = "pairedtris";
+        else
+            metadata["indexCompression"] = "none";
+
+        if (coding == MeshEncoding::UTF) {
+            string outUTF8Name = OUT_ROOT + ".utf8";
+            struct stat filestatus;
+            stat(outUTF8Name.c_str(), &filestatus);
+            metadata["data"] = outUTF8Name;
+            if (indCoding == IndexCoding::DELTA){
+                metadata["indexCoding"] = "delta";
+            } else {
+                metadata["indexCoding"] = "highwater";
+                metadata["max_step"] = max_hw_step;
+            }
+
+            metadata["size"] = int(filestatus.st_size) / 1000;
+        }
+        else if (coding == MeshEncoding::PNG) {
+            string outPNGName = OUT_ROOT + ".png";
+            struct stat filestatus;
+            stat(outPNGName.c_str(), &filestatus);
+            metadata["data"] = outPNGName;
+            if (indCoding == IndexCoding::DELTA){
+                metadata["indexCoding"] = "delta";
+            } else {
+                metadata["indexCoding"] = "highwater";
+                metadata["max_step"] = max_hw_step;
+            }
+            metadata["size"] = int(filestatus.st_size) / 1000;
+        }
         ofstream jsonFile;
         jsonFile.open (OUT_ROOT + ".json");
         jsonFile << metadata;
@@ -379,7 +522,8 @@ namespace Export {
     }
 
 
-    void exportUTFMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT) {
+    void exportMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT,
+                    MeshEncoding coding, IndexCoding indCoding, IndexCompression indCompression) {
 
 
 
@@ -390,9 +534,12 @@ namespace Export {
         vector<int> origIndices;
         readOBJ(INFILEPATH, origVertices, origIndices);
 
-        int* tip = (int*)tipsify(&origIndices[0], origIndices.size()/3, origVertices.size(), 100);
+//        int* tip = (int*)tipsify(&origIndices[0], origIndices.size()/3, origVertices.size(), 100);
+//        vector<int> reorder_indices(tip, tip+origIndices.size());
+//
+        int *forth = (int*)reorderForsyth(&origIndices[0], origIndices.size()/3, origVertices.size());
+        vector<int> reorder_indices(forth, forth+origIndices.size());
 
-        vector<int> tips_indices(tip, tip+origIndices.size());
 
         //get AABB
         AABB* aabb = Geo::getAABB(origVertices);
@@ -401,299 +548,66 @@ namespace Export {
         generateQuantizedVertices(origVertices, aabb, bV, bT, quantizedVertices);
 
 
-
+        //reIndex data (for future progressive stuff)
         map<Vertex, int> vertex_int_map;
         vector<Vertex*> FINAL_VERTICES;
-        vector<int> FINAL_INDICES;
+        vector<int> reIndexed_inds;
 
         cout << "Reindexing..." << endl;
-        reIndexAccordingToIndices(quantizedVertices, tips_indices, vertex_int_map, FINAL_VERTICES, FINAL_INDICES);
+        reIndexAccordingToIndices(quantizedVertices, reorder_indices, vertex_int_map, FINAL_VERTICES, reIndexed_inds);
 
 
-
-//        for (int i = 0; i < 100; i++) {
-//            printf("%d, %d\n", FINAL_INDICES[i], TIPS_INDICES[i]);
-//        }
+        vector<int> FINAL_INDICES;
+        int max_step = 1;
+        if (indCompression == IndexCompression::PAIRED_TRIS) {
+            cout << "Compressing indices..." << endl;
+            compressIndexBuffer(reIndexed_inds, FINAL_INDICES);
+            max_step = 3;
+        }
+        else
+            FINAL_INDICES = reIndexed_inds;
 
 
         cout << "Compressing..." << endl;
-        encodeAndWriteUTF(FINAL_VERTICES, FINAL_INDICES, bV, bT, OUT_ROOT, aabb);
+        vector<int> vertices_to_write;
+        deltaEncodeVertices(FINAL_VERTICES, vertices_to_write, bT);
+        vector<u_int_32> indices_to_write;
+        int fourByters = 0;
+
+        if (indCoding == IndexCoding::DELTA){
+            fourByters = encodeIndicesDelta(FINAL_INDICES, indices_to_write);
+        }
+        else {
+
+            if (coding == MeshEncoding::UTF)
+                fourByters = encodeIndicesHighWater(FINAL_INDICES, indices_to_write, max_step, true); //true says its UTF safe
+            else
+                encodeIndicesHighWater(FINAL_INDICES, indices_to_write, max_step, false); //true says its UTF safe
+        }
 
 
 
+        //write
+        cout << "Writing " << vertices_to_write.size() << " vertex data and " << indices_to_write.size() << " index data." << endl;
+
+        if (coding == MeshEncoding::UTF)
+            writeDataUTF(vertices_to_write, indices_to_write, OUT_ROOT, indCoding);
+        else
+            writeDataPNG(vertices_to_write, indices_to_write, OUT_ROOT, indCoding);
+        writeHeader(vertices_to_write,
+                      indices_to_write,
+                      int(FINAL_VERTICES.size()),
+                      int(FINAL_INDICES.size()/3),
+                      bV,
+                      bT,
+                      fourByters,
+                      OUT_ROOT,
+                      aabb,
+                      coding,
+                      indCoding,
+                      indCompression,
+                      max_step);
     }
 
-
-
-/*
-
-
-    vector<unsigned int> loadAndQuantize(const string INFILEPATH,
-                         const string OUT_ROOT,
-                         vector<Vertex*>& QUANTVERTICES,
-                          AABB* aabb,
-                         int bV, int bN, int bT){
-
-        vector<Vertex*> ORIGVERTICES;
-
-        //load obj file
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string err = tinyobj::LoadObj(shapes, materials, INFILEPATH.c_str()); //TODO multiple materials
-        if (!err.empty()) {
-            std::cerr << err << std::endl;
-            exit(1);
-        }
-
-        //parse data into Vertex and Face lists
-
-        tinyobj::mesh_t m = shapes[0].mesh;
-        for (int i = 0; i < m.positions.size()/3; i++) {
-            Vertex *newVertex = new Vertex(vec3(m.positions[i*3],m.positions[i*3+1],m.positions[i*3+2]));
-            newVertex->normal = vec3(m.normals[i*3],m.normals[i*3+1],m.normals[i*3+2]);
-            if (m.texcoords.size() != 0)
-                newVertex->texture = vec2(m.texcoords[i*2],m.texcoords[i*2+1]);
-            ORIGVERTICES.push_back(newVertex);
-        }
-
-
-        //get AABB
-        aabb = Geo::getAABB(ORIGVERTICES);
-
-        //quantize everything
-        for (int i = 0; i < ORIGVERTICES.size(); i++){
-            Vertex * currVert = ORIGVERTICES[i];
-            vector<int> currPos = (vector<int>)Geo::quantizeVertexPosition(currVert->pos, aabb, bV);
-            vector<int> currNorm = (vector<int>)Geo::quantizeVertexNormal(currVert->normal, bN);
-
-
-            Vertex *newVertex = new Vertex(vec3(currPos[0], currPos[1], currPos[2]));
-            newVertex->normal = vec3(currNorm[0],currNorm[1],currNorm[2]);
-            vector<int> currCoords = (vector<int>)Geo::quantizeVertexTexture(currVert->texture, bT);
-            newVertex->texture = vec2(currCoords[0],currCoords[1]);
-            QUANTVERTICES.push_back(newVertex);
-
-        }
-        return m.indices;
-    }
-
-
-    void reIndex(vector<Vertex*>& QUANTVERTICES,
-                 vector<unsigned int>& mindices,
-                 vector<Face*>& FACES,
-                 vector<Vertex*>& FINALVERTICES){
-
-        map<Vertex, int> VERTICES_MAP;
-        //reindex
-        int newVertCounter = 0;
-        std::map<Vertex, int>::iterator it;
-        int index = 0;
-        int nextHighWaterMark = 0, delta = 0;
-        //for each set of three indices
-        for (int i = 0; i < mindices.size(); i+=3) {
-            //creat empty vector for new face indices
-            vector<int> newFaceIndices;
-            //loop through next three indices
-            for (int j = 0; j < 3; j++) {
-                //get current index
-                int index = mindices[i+j];
-                //get vert referenced by pointer
-                Vertex vert = *QUANTVERTICES[index];
-                //try to find vertex in map
-                it = VERTICES_MAP.find(vert);
-
-                //if its there, add the index to the newFaceindex list
-                if (it != VERTICES_MAP.end()) {
-
-//                    delta = newVertCounter - it->second;
-//                    if (delta > 255) {
-//
-//                        newFaceIndices.push_back(newVertCounter);
-//                        VERTICES_MAP[vert] = newVertCounter;
-//                        FINALVERTICES.push_back(QUANTVERTICES[index]);
-//                        newVertCounter++; // now increment
-//                    }
-//                    else {
-                    newFaceIndices.push_back(it->second);
-                    //}
-
-                }
-                    //otherwise, add size-1 of current map as index
-                    //and add vert to map
-                else {
-                    newFaceIndices.push_back(newVertCounter);
-                    VERTICES_MAP[vert] = newVertCounter;
-                    FINALVERTICES.push_back(QUANTVERTICES[index]);
-                    newVertCounter++; // now increment
-                }
-            }
-
-            Face *newFace = new Face(newFaceIndices[0], newFaceIndices[1], newFaceIndices[2]);
-            if (newFaceIndices[0] < 0)
-                cout << newFaceIndices[0] << " " << newFaceIndices[1] << " " << newFaceIndices[2] << endl;
-            FACES.push_back(newFace);
-
-
-        }
-
-    }
-
-    void exportPNGMesh(const string INFILEPATH, const string OUT_ROOT) {
-
-        int bV = 11;
-        int bN = 8;
-        int bT = 8;
-
-        vector<Vertex*> QUANTVERTICES;
-        vector<Vertex*> FINALVERTICES;
-        vector<Face*> FACES;
-        AABB* aabb;
-
-        cout << "Reading files..." << endl;
-
-        vector<unsigned int> mindices = loadAndQuantize(INFILEPATH, OUT_ROOT, QUANTVERTICES, aabb, bV, bN, bT);
-
-        cout << "Reindexing..." << endl;
-
-        reIndex(QUANTVERTICES, mindices, FACES, FINALVERTICES);
-
-
-        //delta encode indices
-        vector<int> INDICES;
-        int lastIndex = 0;
-        int index = 0;
-        int nextHighWaterMark = 0;
-        int delta;
-        int dMax = 0;
-        for (int i = 0; i < FACES.size(); i++) {
-            for (int j = 0; j < FACES[i]->indices.size(); j++) {
-
-                index = FACES[i]->indices[j];
-                delta = nextHighWaterMark - index;
-                if (index == nextHighWaterMark) {
-                    nextHighWaterMark++;
-                }
-
-                if (delta > dMax) dMax = delta;
-
-                INDICES.push_back(delta);
-            }
-        }
-
-        cout << "max:" << dMax << endl;
-
-        cout << QUANTVERTICES.size() << endl;
-        cout << FINALVERTICES.size() << endl;
-        cout << INDICES.size() << endl;
-
-
-
-        //embed all position into one vector using delta encoding
-        vector<int> positionData;
-        //do all xs, then all ys, then all zs in order to minimise delta
-        for (int i = 0; i < FINALVERTICES.size(); i++) {
-            int newIndex = FINALVERTICES[i]->pos.x;
-            positionData.push_back(newIndex);
-        }
-        //do all xs, then all ys, then all zs in order to minimise delta
-        for (int i = 0; i < FINALVERTICES.size(); i++) {
-            int newIndex = FINALVERTICES[i]->pos.y;
-            positionData.push_back(newIndex);
-        }
-        //do all xs, then all ys, then all zs in order to minimise delta
-        for (int i = 0; i < FINALVERTICES.size(); i++) {
-            int newIndex = FINALVERTICES[i]->pos.z;
-            positionData.push_back(newIndex);
-
-        }
-        //now normals
-        for (int i = 0; i < FINALVERTICES.size(); i++) {
-            int newIndex = FINALVERTICES[i]->normal.x;
-            positionData.push_back(newIndex);
-        }
-        for (int i = 0; i < FINALVERTICES.size(); i++) {
-            int newIndex = FINALVERTICES[i]->normal.y;
-            positionData.push_back(newIndex);
-        }
-//        for (int i = 0; i < FINALVERTICES.size(); i++) {
-//            int newIndex = FINALVERTICES[i]->normal.z;
-//            positionData.push_back(newIndex);
-//        }
-        //now textures
-//        for (int i = 0; i < FINALVERTICES.size(); i++) {
-//            int newIndex = FINALVERTICES[i]->texture.x;
-//            positionData.push_back(newIndex);
-//        }
-//        for (int i = 0; i < FINALVERTICES.size(); i++) {
-//            int newIndex = FINALVERTICES[i]->texture.y;
-//            positionData.push_back(newIndex);
-//        }
-
-
-
-        const int IMAGE_RESOLUTION = 4096;
-        int pCounter = 0;
-        png::image< png::rgba_pixel > imager(IMAGE_RESOLUTION, IMAGE_RESOLUTION);
-        for (size_t y = 0; y < imager.get_height(); ++y)
-        {
-            for (size_t x = 0; x < imager.get_width(); ++x)
-            {
-                if (pCounter < positionData.size()) {
-
-                    if (pCounter < positionData.size()-1) {
-                        unsigned int quantVal1 = (unsigned int) positionData[pCounter++];
-                        unsigned int quantVal2= (unsigned int ) positionData[pCounter++];
-                        //int r = (quantVal & 0x00FF0000) >> 16;
-                        int r = (quantVal1 & 0x0000FF00) >> 8;
-                        int g = (quantVal1 & 0x000000FF);
-                        int b = (quantVal2 & 0x0000FF00) >> 8;
-                        int a = (quantVal2 & 0x000000FF);
-
-                        imager[y][x] = png::rgba_pixel(r, g, b, a);
-                    }
-                    else
-                        imager[y][x] = png::rgba_pixel(0, 0, 0, 0);
-                }
-            }
-        }
-        imager.write("rgb.png");
-
-        int iCounter = 0;
-        png::image< png::rgb_pixel > imagei(IMAGE_RESOLUTION, IMAGE_RESOLUTION);
-        for (size_t y = 0; y < imagei.get_height(); ++y)
-        {
-            for (size_t x = 0; x < imagei.get_width(); ++x)
-            {
-                if (iCounter < INDICES.size()) {
-
-                    if (iCounter < INDICES.size()-1) {
-//                        unsigned int r = (unsigned int )INDICES[iCounter];
-//                        unsigned int g = (unsigned int )INDICES[iCounter+1];
-//                        unsigned int b = (unsigned int )INDICES[iCounter+2];
-//                        imagei[y][x] = png::rgb_pixel(r, g, b);
-//                        iCounter+=3;
-                        unsigned int quantVal = INDICES[iCounter++];
-                        int r = (quantVal & 0x00FF0000) >> 16;
-                        int g = (quantVal & 0x0000FF00) >> 8;
-                        int b = (quantVal & 0x000000FF);
-                        imagei[y][x] = png::rgb_pixel(r, g, b);
-                    }
-                    else
-                        imagei[y][x] = png::rgb_pixel(0, 0, 0);
-                }
-                // non-checking equivalent of image.set_pixel(x, y, ...);
-            }
-        }
-
-        imagei.write("index.png");
-
-
-
-
-    }
-
-
-
-    */
 }
 

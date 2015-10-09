@@ -27,9 +27,16 @@ using jsoncons::pretty_print;
 using namespace std;
 using namespace glm;
 
+enum class MeshEncoding {UTF, PNG};
+enum class IndexCoding {DELTA, HIGHWATER};
+enum class IndexCompression{NONE, PAIRED_TRIS};
+
+typedef unsigned int u_int_32;
+
 namespace Export {
-    void exportUTFMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT);
-    void exportPNGMesh(const string INFILEPATH, const string OUT_ROOT);
+    void exportMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT,
+                    MeshEncoding coding, IndexCoding indCoding, IndexCompression indCompression);
+
 }
 
 

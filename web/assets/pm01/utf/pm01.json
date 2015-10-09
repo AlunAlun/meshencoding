@@ -15,16 +15,19 @@
     {
       "bits": {
         "normal": 8,
-        "texture": 11,
+        "texture": 10,
         "vertex": 11
       },
-      "faces": 1242568,
-      "utfIndexBuffer": 5450874,
+      "faces": 1219264,
+      "utfIndexBuffer": 5354956,
       "vertices": 574442
     }
   ],
   "data": "pm01.utf8",
-  "size": 15754,
+  "indexCoding": "highwater",
+  "indexCompression": "pairedtris",
+  "max_step": 3,
+  "size": 15502,
   "material" : {
     "diffuse_texture": "PM01-m.jpg"
   }

@@ -3,7 +3,10 @@ MOVE_CAMERA = false;
 ROT_SPEED = 0.01;
 ZOOM_SPEED = 0.1;
 
+var MeshType = { UTF: 1, PNG: 2 }
+
 var MESHAPP = {
+
 	//camera variables
 	nodes:[],
 	mousePos:[0,0],
@@ -20,17 +23,6 @@ var MESHAPP = {
 		//init stats
 		this.initStats();
 
-		//callback to set camera position
-		function setCamera(AABB) {
-			MESHAPP.cam_target = [AABB.min[0]+(AABB.range[0]/2),AABB.min[1]+(AABB.range[1]/2),AABB.min[2]+(AABB.range[2]/2)];
-
-			distToCenter = MESHAPP.cam_target[2]-AABB.range[2]*3;
-			MESHAPP.cam_pos = [ Math.sin(MESHAPP.cam_angle)*distToCenter,
-							    MESHAPP.cam_target [1],
-								Math.cos(MESHAPP.cam_angle)*distToCenter];
-			MESHAPP.maxZoom = AABB.range[0]*2;
-		}
-
 		//initGL
 		var gl = GL.create({width:window.innerWidth,height:window.innerHeight});
 		gl.getExtension("OES_element_index_uint");
@@ -38,22 +30,12 @@ var MESHAPP = {
 		var container = document.querySelector("#content");
 		container.appendChild(gl.canvas);
 
-		//create textures if need be
-		var colorTexture = GL.Texture.fromURL("assets/checkers.jpg",{temp_color:[255,255,255,255], minFilter: gl.LINEAR_MIPMAP_LINEAR});
+        //get metadata and then load mesh
+        var that = this;
+        this.peekMeshMetaData(filepath+filename, function(){
+            that.loadMesh(filepath, filename, vertexShader, fragmentShader);
+        });
 
-		//create nodes
-		var utfMesh = new UTFMesh(vertexShader,fragmentShader);
-		utfMesh.filepath = filepath;
-		//custom loading message
-		utfMesh.onLoadProgress = function(evt) {
-			document.getElementById("infoBox").innerHTML = parseInt((evt.loaded/10)/utfMesh.meta.size) + "%";
-		}
-		//start load and pass callback to set camera position
-		utfMesh.startLoad(filename, setCamera);
-		utfMesh.colorTexture = colorTexture;
-		//append to node list
-		this.nodes.push(utfMesh);
-		
 		//create basic matrices for cameras and transformation
 		var view = mat4.create();
 		var model = mat4.create();
@@ -165,7 +147,58 @@ var MESHAPP = {
 		this.stats.domElement.style.left = '0px';
 		this.stats.domElement.style.top = '0px';
 		document.body.appendChild( this.stats.domElement );
-	}
+	},
+    loadMesh: function(filepath, filename, vertexShader, fragmentShader) {
+
+        //callback to set camera position
+        function setCamera(AABB) {
+            MESHAPP.cam_target = [AABB.min[0]+(AABB.range[0]/2),AABB.min[1]+(AABB.range[1]/2),AABB.min[2]+(AABB.range[2]/2)];
+
+            distToCenter = MESHAPP.cam_target[2]-AABB.range[2]*3;
+            MESHAPP.cam_pos = [ Math.sin(MESHAPP.cam_angle)*distToCenter,
+                MESHAPP.cam_target [1],
+                Math.cos(MESHAPP.cam_angle)*distToCenter];
+            MESHAPP.maxZoom = AABB.range[0]*2;
+        }
+
+        //create textures if need be
+        var colorTexture = GL.Texture.fromURL("assets/checkers.jpg",{temp_color:[255,255,255,255], minFilter: gl.LINEAR_MIPMAP_LINEAR});
+
+        //create nodes
+        var theMesh;
+        if (this.meshType == MeshType.UTF)
+            theMesh = new UTFMesh(vertexShader,fragmentShader);
+        else if (this.meshType == MeshType.PNG)
+            theMesh = new PNGMesh(vertexShader, fragmentShader);
+        theMesh.filepath = filepath;
+        //custom loading message
+        theMesh.onLoadProgress = function(evt) {
+            document.getElementById("infoBox").innerHTML = parseInt((evt.loaded/10)/theMesh.meta.size) + "%";
+        }
+        //start load and pass callback to set camera position
+        theMesh.startLoad(filename, setCamera);
+        theMesh.colorTexture = colorTexture;
+        //append to node list
+        this.nodes.push(theMesh);
+
+    },
+    peekMeshMetaData: function(jsonFile, callback){
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', jsonFile);
+
+        xhr.onload = function () {
+            if (xhr.status >= 200 && xhr.status < 400) {
+                var jsonData = JSON.parse(xhr.responseText);
+                if (jsonData.data.endsWith("png"))
+                    this.meshType = MeshType.PNG;
+                else if (jsonData.data.endsWith("utf8"))
+                    this.meshType = MeshType.UTF;
+
+                if (callback) callback();
+            }
+        }.bind(this);
+        xhr.send();
+    }
 
 }
 
@@ -202,4 +235,10 @@ Element.prototype.leftTopScreen = function () {
 
     return new Array (x, y);
 };
+
+if (!String.prototype.endsWith) {
+    String.prototype.endsWith = function(suffix) {
+        return this.indexOf(suffix, this.length - suffix.length) !== -1;
+    };
+}
 

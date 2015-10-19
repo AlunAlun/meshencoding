@@ -14,6 +14,7 @@
 
 	<script type="text/javascript" src="js/utfmesh.js"></script>
 	<script type="text/javascript" src="js/pngmesh.js"></script>
+	<script type="text/javascript" src="js/b128mesh.js"></script>
 	<script type="text/javascript" src="js/MESHAPP.js"></script>
 
 </head>
@@ -23,74 +24,77 @@
 		<div id="content">
 			<div id="centerText">
 				<h1>Mesh Encoding for the Web</h1>
-				<p>Single mesh, 32-bit index buffer, 49 bits per vertex (71bpv with texture coords):</p>
+				<p>Single mesh, 32-bit index buffer, 49 bits per vertex (69bpv with texture coords):</p>
 				<ul>
 					
 					<li>11-bit/channel precision for vertices</li>
 					<li>16-bit total for normals</li>
-					<li>11-bit/channel for textures (where necessary)</li>
+					<li>10-bit/channel for textures (where necessary)</li>
 				</ul>
-                <p>We show results below with two delivery formats, UTF-8 (with modifications to allow 32-bit index buffers)
-                and PNG image format.</p>
-				<h3>Stamford Bunny</h3>
+                <p>Results below with three delivery formats, UTF-8, PNG image, and base128 varint binary. UTF-8 is, by definition, limited
+                to 20ish bits precision, and has to have some ugly hacks inserted to overcome the surrogate pairs. PNG
+                doesn't compress quite so well, but allows a true 32-bit index buffer, and is still a bit of an
+				ugly hack. The base128 varint is elegant and permits 29-bits of index data, which should more than
+				enough for most meshes</p>
+				<h3>Stanford Bunny</h3>
                 <h4>(4.9MB Wavefront OBJ; 1.67MB Raw Binary Mesh)</h4>
 				<p><a href="index.html?file=assets/bunny/utf/bunny.json">UTF+gzip.</a>
-					 227kB. 70ms decompression.</p>
+					 227kB. 80ms decompression.</p>
 				<p><a href="index.html?file=assets/bunny/png/bunny.json">PNG.</a>
-					306kB. 550ms decompression.</p>
+					 276kB. 550ms decompression.</p>
+				<p><a href="index.html?file=assets/bunny/b128/bunny.json">Base128.</a>
+					224kB. 80ms decompression.</p>
 				<h3>Happy Buddha</h3>
                 <h4>(84MB Wavefront OBJ; 25.2MB Raw Binary Mesh)</h4>
 				<p><a href="index.html?file=assets/buddha/utf/buddha.json">UTF+gzip.</a> 
-					3.1MB. 380ms decompression</p>
+					3.1MB. 300ms decompression</p>
 				<p><a href="index.html?file=assets/buddha/png/buddha.json">PNG.</a>
-					3.6MB. 1050ms decompression</p>
+					3.6MB. 1000ms decompression</p>
+				<p><a href="index.html?file=assets/buddha/b128/buddha.json">Base128.</a>
+					3.1MB. 300ms decompression</p>
 				<h3>University of Surrey Campus</h3>
                 <h4>(150MB Wavefront OBJ; 40.1MB Raw Binary Mesh)</h4>
 				<p><a href="index.html?file=assets/pm01/utf/pm01.json">UTF+gzip.</a> 9.1MB. 500ms decompression</p>
 				<p><a href="index.html?file=assets/pm01/png/pm01.json">PNG.</a> 9.4MB. 1250ms decompression</p>
-				<h2>Comparison with WebGL-loader</h2>
-				<p><a href="Google's WebGL-loader">Google's WebGL-loader</a> is one of the better known mesh compression
-				techniques for web rendering. Our UTF-based technique is similar, but improves on WebGL-loader in
-                    several ways:</p>
-				<ul>
-                    <li>It permits a 32-bit index buffer, overcoming issues with of the UTF-8 format which
-                        WebGL-loader does not deal with. This permits the mesh to be loaded (and displayed) in one go,
-                        and not as piecemeal chunks. this also makes it considerably less complicated to implement
-                        progressive meshes (watch this space!)</li>
-                    <li>It compresses 3-channel normals to 2x8-bit channels, with no perceptible quality difference.
-                        This means that, for most meshes, it creates a smaller file size, and decompresses in the same time.
-                        The table below summarises the differences:
-                        <table style="width:100%">
-                            <tr class="heading">
-                                <td>Model</td>
-                                <td><a href="https://code.google.com/p/webgl-loader/">WebGL-loader</a></td>
-                                <td>Our</td>
-                            </tr>
-                            <tr>
-                                <td>Ben</td>
-                                <td>326KB</td>
-                                <td class="green">241KB <a class="small" href="index.html?file=assets/ben/utf/ben.json">link</a></td>
-                            </tr>
-                            <tr>
-                                <td>Walt</td>
-                                <td>476KB</td>
-                                <td class="green">398KB <a class="small" href="index.html?file=assets/walt/utf/walt.json">link</a></td>
-                            </tr>
-                            <tr>
-                                <td>Buddha @ 11-bit position precision</td>
-                                <td>2.7MB</td>
-                                <td class="red">3.1MB <a class="small" href="index.html?file=assets/buddha/utf/buddha.json">link</a></td>
-                            </tr>
-                            <tr>
-                                <td>Buddha @ 14-bit position precision</td>
-                                <td>5.1MB</td>
-                                <td class="green">3.7MB <a class="small" href="index.html?file=assets/buddha/utf/buddha14.json">link</a></td>
-                            </tr>
-                        </table>
+				<p><a href="index.html?file=assets/pm01/utf/pm01.json">UTF+gzip.</a> 9.1MB. 400ms decompression</p>
+				<!--<h2>Comparison with WebGL-loader</h2>-->
 
-                    </li>
-				</ul>
-                <p id="footer">October 2015</p>
+				<!--<p><a href="https://code.google.com/p/webgl-loader/">WebGL-loader</a>, written by Won Chun while at Google,-->
+					<!--is one of the better known mesh compression	techniques for web rendering.-->
+					<!--My base128 varint method method uses many of the same techniques, but </p>-->
+				<!--<table style="width:100%">-->
+					<!--<tr class="heading">-->
+						<!--<td>Model</td>-->
+						<!--<td><a href="https://code.google.com/p/webgl-loader/">WebGL-loader</a></td>-->
+						<!--<td>My UTF</td>-->
+						<!--<td>My PNG</td>-->
+					<!--</tr>-->
+					<!--<tr>-->
+						<!--<td>Ben</td>-->
+						<!--<td>326KB</td>-->
+						<!--<td>241KB <a class="small" href="index.html?file=assets/ben/utf/ben.json">link</a></td>-->
+						<!--<td>320KB <a class="small" href="index.html?file=assets/ben/png/ben.json">link</a></td>-->
+					<!--</tr>-->
+					<!--<tr>-->
+						<!--<td>Walt</td>-->
+						<!--<td>476KB</td>-->
+						<!--<td>398KB <a class="small" href="index.html?file=assets/walt/utf/walt.json">link</a></td>-->
+						<!--<td>514KB <a class="small" href="index.html?file=assets/walt/png/walt.json">link</a></td>-->
+					<!--</tr>-->
+					<!--<tr>-->
+						<!--<td>Buddha</td>-->
+						<!--<td>2.7MB</td>-->
+						<!--<td>3.1MB <a class="small" href="index.html?file=assets/buddha/utf/buddha.json">link</a></td>-->
+						<!--<td>3.6MB <a class="small" href="index.html?file=assets/buddha/png/buddha.json">link</a></td>-->
+					<!--</tr>-->
+					<!--&lt;!&ndash;<tr>&ndash;&gt;-->
+					<!--&lt;!&ndash;<td>Buddha @ 14-bit position precision</td>&ndash;&gt;-->
+					<!--&lt;!&ndash;<td>5.1MB</td>&ndash;&gt;-->
+					<!--&lt;!&ndash;<td class="green">3.7MB <a class="small" href="index.html?file=assets/buddha/utf/buddha14.json">link</a></td>&ndash;&gt;-->
+					<!--&lt;!&ndash;</tr>&ndash;&gt;-->
+				<!--</table>-->
+
+				<p id="footer">October 2015</p>
 			</div>
 		</div>
 	</div>

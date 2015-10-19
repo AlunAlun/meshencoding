@@ -170,6 +170,8 @@ var MESHAPP = {
             theMesh = new UTFMesh(vertexShader,fragmentShader);
         else if (this.meshType == MeshType.PNG)
             theMesh = new PNGMesh(vertexShader, fragmentShader);
+		else if (this.meshType == MeshType.B128)
+			theMesh = new B128Mesh(vertexShader, fragmentShader);
         theMesh.filepath = filepath;
         //custom loading message
         theMesh.onLoadProgress = function(evt) {
@@ -193,6 +195,8 @@ var MESHAPP = {
                     this.meshType = MeshType.PNG;
                 else if (jsonData.data.endsWith("utf8"))
                     this.meshType = MeshType.UTF;
+				else if (jsonData.data.endsWith("b128"))
+					this.meshType = MeshType.B128;
 
                 if (callback) callback();
             }

@@ -57,6 +57,7 @@ UTFMesh.prototype.startLoad = function(filename, callback) {
 
 		}
 	}.bind(this);
+	this.tStart= performance.now();
 	xhr.send();
 }
 
@@ -70,10 +71,11 @@ UTFMesh.prototype.loadData = function() {
 
 	xhr.onload = function () {
 		var data = xhr.response;
-		
+		console.log("received all data: "+(performance.now()-this.tStart));
 		this.parseUTFData(data)
 	}.bind(this);
-	xhr.onprogress=this.onLoadProgress
+	xhr.onprogress=this.onLoadProgress;
+
 	xhr.send();
 }
 
@@ -81,7 +83,8 @@ var glob = 0;
 
 UTFMesh.prototype.parseUTFData = function(data) {
 
-	var tStart= performance.now();
+
+
 	var offset = 0;
 	var newBuffers = {};
 	var aabbMin = this.meta.AABB.min;
@@ -111,15 +114,17 @@ UTFMesh.prototype.parseUTFData = function(data) {
 	}
 	for (var i = 0; i < utfIndexBuffer; i++) {indexArray[i] = data.charCodeAt(offset);offset++;}
 
+    console.log(indexArray);
 
-	console.log("parse buffers: "+(performance.now()-tStart));
+
+	console.log("parse buffers: "+(performance.now()-this.tStart));
 
 	newBuffers.vertices = new Float32Array(currNumVerts*3);
 	lastIndexX = 0; lastIndexY = 0; lastIndexZ = 0;
 	for (var i = 0; i < currNumVerts; i++){
 		//x
 		var result = this.decodeSafeInterleavedUTF(vertIntsX, i);
-		
+
 		delta = result.delta; i = result.i;
 		newVal = lastIndexX+delta;
 		lastIndexX = newVal;
@@ -142,7 +147,7 @@ UTFMesh.prototype.parseUTFData = function(data) {
 		newBuffers.vertices[i*3+2] = newVal;	
 	}
 
-	console.log("set verts: "+(performance.now()-tStart));
+	console.log("set verts: "+(performance.now()-this.tStart));
 
 	newBuffers.normals = new Float32Array(currNumVerts*2);
 	lastIndexX = 0; lastIndexY = 0; 
@@ -161,7 +166,7 @@ UTFMesh.prototype.parseUTFData = function(data) {
 		newBuffers.normals[i*2+1] = newVal;
 	}
 
-	console.log("set norms: "+(performance.now()-tStart));
+	console.log("set norms: "+(performance.now()-this.tStart));
 
 	if (!this.skipTexture){
 		lastIndexU = 0; lastIndexV = 0;
@@ -182,7 +187,7 @@ UTFMesh.prototype.parseUTFData = function(data) {
 
 		}
 
-		console.log("set coords: "+(performance.now()-tStart));
+		console.log("set coords: "+(performance.now()-this.tStart));
 	}
 
 	newBuffers.triangles = new Uint32Array(utfIndexBuffer);
@@ -254,7 +259,7 @@ UTFMesh.prototype.parseUTFData = function(data) {
 
 
 
-	console.log("set inds: "+(performance.now()-tStart));
+	console.log("set inds: "+(performance.now()-this.tStart));
 
 	newBuffers.ids = new Float32Array(currNumVerts)
 	for (var i = 0; i < currNumVerts; i++) newBuffers.ids[i] = i;
@@ -272,8 +277,8 @@ UTFMesh.prototype.parseUTFData = function(data) {
 
 	this.compileShader();
 	this.ready = true;
-	console.log("ready "+(performance.now()-tStart));
-	console.log ("base file ready for display");
+	console.log("ready "+(performance.now()-this.tStart));
+	console.log ("ready for display");
 
 	if (this.LOD < this.meta.numLODs-1) { //this.LOD is 0 based, this numLODs starts counting from 1
 		this.LOD += 1;

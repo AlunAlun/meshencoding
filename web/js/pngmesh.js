@@ -47,7 +47,7 @@ PNGMesh.prototype.startLoad = function(filename, callback) {
                         {temp_color:[0,0,0,255], minFilter: gl.LINEAR_MIPMAP_LINEAR});
                 }
             }
-
+            this.tStart= performance.now();
             this.loadData();
 
             if (callback)
@@ -55,6 +55,7 @@ PNGMesh.prototype.startLoad = function(filename, callback) {
 
         }
     }.bind(this);
+
     xhr.send();
 }
 
@@ -63,7 +64,8 @@ PNGMesh.prototype.loadData = function() {
     var meshImage = new Image();
     meshImage.src = this.filepath+this.meta.data;
     meshImage.onload = function(){
-        this.tStart= performance.now();
+        console.log("received all data: "+(performance.now()-this.tStart));
+
         var canvas = document.createElement('canvas');
         canvas.width = meshImage.width;
         canvas.height = meshImage.height;
@@ -90,12 +92,13 @@ PNGMesh.prototype.loadData = function() {
             data.push(RGB);
         }
 
+
+
+
         console.log("read png: "+(performance.now()-this.tStart));
         this.parseUTFData(data);
 
     }.bind(this);
-
-    //todo onloadprogress
 }
 
 PNGMesh.prototype.parseUTFData = function(data) {
@@ -127,6 +130,7 @@ PNGMesh.prototype.parseUTFData = function(data) {
     }
     for (var i = 0; i < currNumIndices; i++) {indexArray[i] = data[offset];offset++;}
 
+    console.log(data);
 
     console.log("parse buffers: "+(performance.now()-this.tStart));
 

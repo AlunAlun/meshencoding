@@ -8,11 +8,14 @@
 
 #include <iostream>
 #include <vector>
+#include <math.h>
 #include "glm/glm.hpp"
 
 
 using namespace std;
 using namespace glm;
+
+const float PI = 3.1415927;
 
 struct Face{
     int facenum;
@@ -61,9 +64,11 @@ struct AABB {
 namespace Geo {
     AABB* getAABB(vector<Vertex*> verts);
     vector<int> quantizeVertexPosition(vec3 pos, AABB* aabb, int bits);
+    vector<int> quantizeVertexPosition(vec3 pos, AABB* aabb, int bVx, int bVy, int bVz);
     vector<int> quantizeVertexNormal(vec3 norm, int bits);
     vector<int> quantizeVertexNormal_to_vec2(vec3 norm, int bits);
     vector<int> quantizeVertexTexture(vec2 coord, int bits);
+    vector<vec3> computeFibonacci_sphere(int samples);
     int getInterleavedUint(int val);
     vec2 octEncode_8bit(vec3 v);
     vec3 octDecode_8bit(vec2 v);

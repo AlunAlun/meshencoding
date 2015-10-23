@@ -102,16 +102,16 @@ var MESHAPP = {
 		gl.captureKeys(true);
 		gl.onkeydown = function(e){
 			if (e.keyCode == 37) { //left
-				this.cam_target[0] -= 1.0;
+				this.cam_target[0] += 0.1;
 			} else
 			if (e.keyCode == 38) { //up
-				this.cam_target[0] -= 1.0;
+				this.cam_target[1] -= 0.1;
 			} else
 			if (e.keyCode == 39) { //right
-				this.cam_target[0] = 1.0;
+				this.cam_target[0] -= 0.1;
 			} else
 			if (e.keyCode == 40) { //down
-				this.cam_target[0] -= 1.0;
+				this.cam_target[1] += 0.1;
 			} 
 
 

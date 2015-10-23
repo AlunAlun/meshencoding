@@ -9,35 +9,79 @@
 #include "tipsify.cpp"
 #include "forsyth.cpp"
 #include "tiny_obj_loader.h"
+#include <string.h>
+#include <stdlib.h>
 
 #define EPSILON 0.0001
 
+#ifdef putc_unlocked
+# define PutChar putc_unlocked
+#else
+# define PutChar putc
+#endif  // putc_unlocked
 
 namespace Export {
+
+    int write_varint(unsigned value, FILE* file) {
+        if (value < 0x80) {
+            PutChar(static_cast<char>(value), file);
+            return 1;
+
+        } else if( value < 0x4000) {
+
+            unsigned char firstByte = (static_cast<char>(value) & 0x7F); // first seven bits
+            firstByte |= 1 << 7;
+            PutChar(static_cast<char>(firstByte), file);
+
+            unsigned shiftVal = value >> 7; //shift off first 7 bits
+            char secondByte = (static_cast<char>(shiftVal) & 0x7F); // next seven bits
+            PutChar(static_cast<char>(secondByte), file);
+            return 2;
+
+        } else if (value < 0x200000) {
+            unsigned char firstByte = (static_cast<char>(value) & 0x7F); // first seven bits
+            firstByte |= 1 << 7;
+            PutChar(static_cast<char>(firstByte), file);
+
+            unsigned shiftVal = value >> 7; //shift off first 7 bits
+            unsigned char secondByte = (static_cast<char>(shiftVal) & 0x7F); // next seven bits
+            secondByte |= 1 << 7;
+            PutChar(static_cast<char>(secondByte), file);
+
+            shiftVal = value >> 14; //shift off first 14 bits
+            unsigned char thirdByte = (static_cast<char>(shiftVal) & 0x7F); // next seven bits
+            PutChar(static_cast<char>(thirdByte), file);
+            return 3;
+        } else if (value < 0x10000000){
+            cout << "invalid b128 value " << value << endl;
+            return 0;
+        }
+        return 0;
+    }
 
     void write_utf8(unsigned code_point, FILE * utfFile)
     {
         if (code_point < 0x80) {
-            fputc(code_point, utfFile);
+            PutChar(static_cast<char>(code_point), utfFile);
         } else if (code_point <= 0x7FF) {
-            fputc((code_point >> 6) + 0xC0, utfFile);
-            fputc((code_point & 0x3F) + 0x80, utfFile);
+            PutChar(static_cast<char>((code_point >> 6) + 0xC0), utfFile);
+            PutChar(static_cast<char>((code_point & 0x3F) + 0x80), utfFile);
         } else if (code_point <= 0xFFFF) {
-            fputc((code_point >> 12) + 0xE0, utfFile);
-            fputc(((code_point >> 6) & 0x3F) + 0x80, utfFile);
-            fputc((code_point & 0x3F) + 0x80, utfFile);
+            PutChar(static_cast<char>((code_point >> 12) + 0xE0), utfFile);
+            PutChar(static_cast<char>(((code_point >> 6) & 0x3F) + 0x80), utfFile);
+            PutChar(static_cast<char>((code_point & 0x3F) + 0x80), utfFile);
         } else if (code_point <= 0x10FFFF) {
-            fputc((code_point >> 18) + 0xF0, utfFile);
-            fputc(((code_point >> 12) & 0x3F) + 0x80, utfFile);
-            fputc(((code_point >> 6) & 0x3F) + 0x80, utfFile);
-            fputc((code_point & 0x3F) + 0x80, utfFile);
+            PutChar(static_cast<char>((code_point >> 18) + 0xF0), utfFile);
+            PutChar(static_cast<char>(((code_point >> 12) & 0x3F) + 0x80), utfFile);
+            PutChar(static_cast<char>(((code_point >> 6) & 0x3F) + 0x80), utfFile);
+            PutChar(static_cast<char>((code_point & 0x3F) + 0x80), utfFile);
         } else {
-            int bob = 0;
-            //cout << "invalid code_point " << code_point << endl;
+
+            cout << "invalid utf8 code_point " << code_point << endl;
         }
     }
 
-    int pushSafeInterleavedUTF(int delta, vector<u_int_32>& indices) {
+    int pushSafeInterleavedUTF(int delta, vector<int>& indices) {
         int interleaved = Geo::getInterleavedUint(delta);
         if (interleaved >= 55295 && interleaved <= 57343) {
             if (delta < 0)
@@ -56,7 +100,7 @@ namespace Export {
 
     }
 
-    void pushSafeUTF(int value, vector<u_int_32>& indices) {
+    void pushSafeUTF(int value, vector<int>& indices) {
         if (value >= 55295 && value <= 57343) {
             value -= 14000;
             indices.push_back(55295);
@@ -102,21 +146,136 @@ namespace Export {
             ORIGINDICES.push_back((int)m.indices[i]);
     }
 
-    void generateQuantizedVertices(vector<Vertex*>& ORIGVERTICES, AABB* aabb, int bV, int bT, vector<Vertex*>& VERTICES) {
+    void generateQuantizedVertices(vector<Vertex*>& ORIGVERTICES,
+                                   AABB* aabb, int bV, int bT,
+                                   vector<Vertex*>& VERTICES,
+                                    VertexQuantization vertexQuantization,
+                                    vector<int>& out_bV) {
+
+        int newVertCounter = 0;
+        map<Vertex, int> vertex_int_map;
+        map<int, int> int_int_map; //old->new
+        std::map<Vertex, int>::iterator it;
+
+        int bVx, bVy, bVz;
+        bVx = bVy = bVz = 0;
+        // if we quantize per axis, calculate if can save
+        if (vertexQuantization == VertexQuantization::PER_AXIS) {
+            //find longest axis; 0 = x, 1 = y, 2 = z
+            int longAxis = 0;
+            if (aabb->range.y > aabb->range.x && aabb->range.y > aabb->range.z )
+                longAxis = 1;
+            else if (aabb->range.z > aabb->range.x && aabb->range.z > aabb->range.y)
+                longAxis = 2;
+
+            if (longAxis == 0) {
+                bVx = bV;
+                int intFactorY = (int) (aabb->range.x / aabb->range.y);
+                bVy = bV - (intFactorY - 1);
+                int intFactorZ = (int) (aabb->range.x / aabb->range.z);
+                bVz = bV - (intFactorZ - 1);
+            }
+            if (longAxis == 1) {
+                int intFactorX = (int) (aabb->range.y / aabb->range.x);
+                bVx = bV - (intFactorX - 1);
+                bVy = bV;
+                int intFactorZ = (int) (aabb->range.y / aabb->range.z);
+                bVz = bV - (intFactorZ - 1);
+            }
+            if (longAxis == 0) {
+
+                int intFactorX = (int) (aabb->range.z / aabb->range.x);
+                bVx = bV - (intFactorX - 1);
+                int intFactorY = (int) (aabb->range.z / aabb->range.y);
+                bVy = bV - (intFactorY - 1);
+                bVz = bV;
+            }
+
+            printf("long axis %d\n", longAxis);
+            printf("bVx %d, bVy %d, bVz %d\n", bVx, bVy, bVz);
+            out_bV.push_back(bVx);
+            out_bV.push_back(bVy);
+            out_bV.push_back(bVz);
+        } else {
+            out_bV.push_back(bV);
+            out_bV.push_back(bV);
+            out_bV.push_back(bV);
+        }
+
+
 
         //quantize everything
         for (int i = 0; i < ORIGVERTICES.size(); i++){
             Vertex * currVert = ORIGVERTICES[i];
-            vector<int> currPos = Geo::quantizeVertexPosition(currVert->pos, aabb, bV);
+            vector<int> currPos;
+            if (vertexQuantization == VertexQuantization::GLOBAL)
+                currPos = Geo::quantizeVertexPosition(currVert->pos, aabb, bV);
+            else if (vertexQuantization == VertexQuantization::PER_AXIS)
+                currPos = Geo::quantizeVertexPosition(currVert->pos, aabb, bVx, bVy, bVz);
+            else { printf("Unknown vertex quantization method"); exit(0);}
 
             Vertex *newVertex = new Vertex(vec3(currPos[0], currPos[1], currPos[2]));
             newVertex->normal2 = Geo::octEncode_8bit(currVert->normal);
 
             vector<int> currCoords = Geo::quantizeVertexTexture(currVert->texture, bT);
             newVertex->texture = vec2(currCoords[0],currCoords[1]);
+
             VERTICES.push_back(newVertex);
 
         }
+    }
+
+    void removeDuplicateVertices(vector<Vertex*>& in_vertices,
+                                 vector<Vertex*>& out_vertices,
+                                 vector<int>& in_indices,
+                                 vector<int>& out_indices) {
+
+        int newVertCounter = 0;
+        map<Vertex, int> vertex_int_map;
+        std::map<Vertex, int>::iterator it;
+        map<int, int> int_int_map; //old->new
+
+        for (size_t i = 0; i < in_vertices.size(); i++) {
+            //get pointer to vertex
+            Vertex *v = in_vertices[i];
+            //dereference pointer to get vertex struct
+            Vertex nv = *v;
+            //search for struct in map
+            it = vertex_int_map.find(nv);
+            //if we don't find it
+            if (it == vertex_int_map.end()) {
+                //add to out_verts
+                out_vertices.push_back(v);
+                //add to map for searching
+                vertex_int_map[nv] = newVertCounter;
+                //add to remapping map
+                int_int_map[i] = newVertCounter++;
+            }
+            else { //we found it
+                int_int_map[i] = it->second;
+            }
+        }
+
+        printf("pre quantize verts: %d ; post %d\n", (int)in_vertices.size(), (int)out_vertices.size());
+
+        for (size_t i = 0; i < in_indices.size(); i+=3) {
+            int A = int_int_map[in_indices[i]];
+            int B = int_int_map[in_indices[i+1]];
+            int C = int_int_map[in_indices[i+2]];
+
+            if (A == B || B == C || C == A) {
+                int bob = 0; // decomposed tri do nothing!
+            }
+            else { //all inds are different, add tri
+                out_indices.push_back(A);
+                out_indices.push_back(B);
+                out_indices.push_back(C);
+            }
+
+        }
+
+        printf("pre quantize inds: %d ; post %d\n", (int)in_indices.size(), (int)out_indices.size());
+
     }
 
     void reIndexAccordingToIndices(vector<Vertex*>& quantizedVertices,
@@ -139,10 +298,12 @@ namespace Export {
                 int index = origIndices[i+j];
                 //get vert referenced by pointer
                 Vertex vert = *quantizedVertices[index];
+
                 //try to find vertex in map
                 it = vertex_int_map.find(vert);
                 //if its there, add the index to the newFaceindex list
                 if (it != vertex_int_map.end()) {
+
                     newFaceIndices.push_back(it->second);
                 }
                     //otherwise, add size-1 of current map as index
@@ -154,13 +315,13 @@ namespace Export {
                 }
             }
 
-            Face *newFace = new Face(newFaceIndices[0], newFaceIndices[1], newFaceIndices[2]);
+
             indices_out.push_back(newFaceIndices[0]);
             indices_out.push_back(newFaceIndices[1]);
             indices_out.push_back(newFaceIndices[2]);
-            if (newFaceIndices[0] < 0)
-                cout << newFaceIndices[0] << " " << newFaceIndices[1] << " " << newFaceIndices[2] << endl;
-            //FACES.push_back(newFace);
+
+
+
         }
 
         map<int, Vertex*> INT_VERTEX_MAP;
@@ -169,9 +330,11 @@ namespace Export {
             INT_VERTEX_MAP[itr->second] = (Vertex*)&(itr->first);
         }
 
-        for (int i; i < INT_VERTEX_MAP.size(); i++){
+        for (int i= 0; i < INT_VERTEX_MAP.size(); i++){
             FINAL_VERTICES.push_back(INT_VERTEX_MAP[i]);
         }
+
+        //now remove duplicate tris from index
 
     }
 
@@ -255,7 +418,7 @@ namespace Export {
         }
     }
 
-    int encodeIndicesDelta(vector<int>& FINAL_INDICES, vector<u_int_32>& indices_to_write) {
+    int encodeIndicesDelta(vector<int>& FINAL_INDICES, vector<int>& indices_to_write) {
 
         float al = 0;
         float un = 0;
@@ -281,7 +444,7 @@ namespace Export {
         return fourByters;
     }
 
-    int encodeIndicesHighWater(vector<int>& FINAL_INDICES, vector<u_int_32>& indices_to_write, int max_step, bool utfSafe) {
+    int encodeIndicesHighWater(vector<int>& FINAL_INDICES, vector<int>& indices_to_write, int max_step, bool utfSafe) {
         //hwm encode indices
         float al = 0;
         float un = 0;
@@ -368,9 +531,10 @@ namespace Export {
     }
 
     void writeDataUTF(vector<int>& vertices_to_write,
-                      vector<u_int_32>& indices_to_write,
+                      vector<int>& indices_to_write,
                       const string OUT_ROOT,
                       IndexCoding indCoding) {
+
         //write files
         cout << "Writing data..." << endl;
 
@@ -379,13 +543,18 @@ namespace Export {
         string outUTF8Name = OUT_ROOT + ".utf8";
         utfFile = fopen (outUTF8Name.c_str(),"w");
         if (utfFile!=NULL) {
+            int counter = 0;
             for (int i = 0; i < vertices_to_write.size(); i++) {
 
-                //write_utf8(vertices_to_write[i], utfFile);
+                write_utf8(vertices_to_write[i], utfFile);
+                counter++;
             }
 
             for (int i = 0; i < indices_to_write.size(); i++) {
+                if (counter > 319560 && counter < 319575)
+                    printf("%d ", indices_to_write[i]);
                 write_utf8(indices_to_write[i], utfFile);
+                counter++;
             }
 
             fclose (utfFile);
@@ -400,7 +569,7 @@ namespace Export {
 
 
     void writeDataPNG(vector<int>& vertices_to_write,
-                    vector<u_int_32>& indices_to_write,
+                    vector<int>& indices_to_write,
                     const string OUT_ROOT,
                     IndexCoding indCoding) {
 
@@ -438,9 +607,44 @@ namespace Export {
 
     }
 
+    int writeDataVARINT(vector<int>& vertices_to_write,
+                      vector<int>& indices_to_write,
+                      const string OUT_ROOT,
+                      IndexCoding indCoding) {
+
+        //write files
+        cout << "Writing varint data..." << endl;
+
+        //first write utfFile (in order to get it's size for JSON
+        FILE * vintFile;
+        string outVINTName = OUT_ROOT + ".b128";
+        vintFile = fopen (outVINTName.c_str(),"w");
+        int numBytes = 0;
+        if (vintFile!=NULL) {
+            for (int i = 0; i < vertices_to_write.size(); i++) {
+
+
+                numBytes+=write_varint(vertices_to_write[i], vintFile);
+            }
+
+            for (int i = 0; i < indices_to_write.size(); i++) {
+                numBytes+=write_varint(indices_to_write[i], vintFile);
+            }
+
+            fclose (vintFile);
+
+
+        }
+
+        struct stat filestatus;
+        stat( outVINTName.c_str(), &filestatus );
+        cout << int(filestatus.st_size)/1000 << " bytes\n";
+        return numBytes;
+    }
+
 
     void writeHeader(vector<int>& vertices_to_write,
-                     vector<u_int_32>& indices_to_write,
+                     vector<int>& indices_to_write,
                      int numVerts,
                      int numFaces,
                      int bV,
@@ -451,7 +655,12 @@ namespace Export {
                      MeshEncoding coding,
                      IndexCoding indCoding,
                      IndexCompression indCompression,
-                     int max_hw_step) {
+                     int max_hw_step,
+                     int numBytes,
+                     VertexQuantization vertexQuantization,
+                     int bVx = 11,
+                     int bVy = 11,
+                     int bVz = 11) {
 
         json metadata;
         json lodArray(json::an_array);
@@ -462,7 +671,18 @@ namespace Export {
         currLod["utfIndexBuffer"] = int(indices_to_write.size())+fourByters; //add number of 3 or 4 byte indices for utf parsing
 
         json currBits;
-        currBits["vertex"] = bV;
+        if (vertexQuantization == VertexQuantization::GLOBAL) {
+            currLod["vertexQuantization"] = "global";
+            currBits["vertex"] = bV;
+        }
+        else {
+            currLod["vertexQuantization"] = "perVertex";
+            json currBitsVTX;
+            currBitsVTX["x"] = bVx;
+            currBitsVTX["y"] = bVy;
+            currBitsVTX["z"] = bVz;
+            currBits["vertex"] = currBitsVTX;
+        }
         currBits["normal"] = 8;
         currBits["texture"] = bT;
         currLod["bits"] = move(currBits);
@@ -515,6 +735,20 @@ namespace Export {
             }
             metadata["size"] = int(filestatus.st_size) / 1000;
         }
+        else if (coding == MeshEncoding::VARINT) {
+            string outVARINTName = OUT_ROOT + ".b128";
+            struct stat filestatus;
+            stat(outVARINTName.c_str(), &filestatus);
+            metadata["data"] = outVARINTName;
+            if (indCoding == IndexCoding::DELTA){
+                metadata["indexCoding"] = "delta";
+            } else {
+                metadata["indexCoding"] = "highwater";
+                metadata["max_step"] = max_hw_step;
+            }
+            metadata["size"] = int(filestatus.st_size) / 1000;
+            metadata["numbytes"] = numBytes;
+        }
         ofstream jsonFile;
         jsonFile.open (OUT_ROOT + ".json");
         jsonFile << metadata;
@@ -523,7 +757,10 @@ namespace Export {
 
 
     void exportMesh(const string INFILEPATH, const string OUT_ROOT, int bV, int bT,
-                    MeshEncoding coding, IndexCoding indCoding, IndexCompression indCompression) {
+                    MeshEncoding coding, IndexCoding indCoding,
+                    IndexCompression indCompression,
+                    TriangleReordering triOrdering,
+                    VertexQuantization vertexQuantization) {
 
 
 
@@ -534,18 +771,35 @@ namespace Export {
         vector<int> origIndices;
         readOBJ(INFILEPATH, origVertices, origIndices);
 
-//        int* tip = (int*)tipsify(&origIndices[0], origIndices.size()/3, origVertices.size(), 100);
-//        vector<int> reorder_indices(tip, tip+origIndices.size());
-//
-        int *forth = (int*)reorderForsyth(&origIndices[0], origIndices.size()/3, origVertices.size());
-        vector<int> reorder_indices(forth, forth+origIndices.size());
+        vector<int> reorder_indices;
+        if (triOrdering == TriangleReordering::TIPSIFY) {
+            int* tip = (int*)tipsify(&origIndices[0], origIndices.size()/3, origVertices.size(), 100);
+            reorder_indices.assign(tip, tip+origIndices.size());
+        }
+        else if (triOrdering == TriangleReordering::FORSYTH) {
+            int *forth = (int *) reorderForsyth(&origIndices[0], origIndices.size() / 3, origVertices.size());
+            reorder_indices.assign(forth, forth + origIndices.size());
+        }
+        else
+            reorder_indices = origIndices;
 
 
         //get AABB
         AABB* aabb = Geo::getAABB(origVertices);
 
+
         //quantize
-        generateQuantizedVertices(origVertices, aabb, bV, bT, quantizedVertices);
+        vector<int> out_bV;
+        generateQuantizedVertices(origVertices, aabb, bV, bT, quantizedVertices, vertexQuantization, out_bV);
+
+        //remove duplicate verts
+        vector<Vertex*> dupVerts;
+        vector<int> dupInds;
+        removeDuplicateVertices(quantizedVertices,
+                                dupVerts,
+                                reorder_indices,
+                                dupInds);
+
 
 
         //reIndex data (for future progressive stuff)
@@ -554,7 +808,8 @@ namespace Export {
         vector<int> reIndexed_inds;
 
         cout << "Reindexing..." << endl;
-        reIndexAccordingToIndices(quantizedVertices, reorder_indices, vertex_int_map, FINAL_VERTICES, reIndexed_inds);
+        //reIndexAccordingToIndices(quantizedVertices, reorder_indices, vertex_int_map, FINAL_VERTICES, reIndexed_inds);
+        reIndexAccordingToIndices(dupVerts, dupInds, vertex_int_map, FINAL_VERTICES, reIndexed_inds);
 
 
         vector<int> FINAL_INDICES;
@@ -568,10 +823,12 @@ namespace Export {
             FINAL_INDICES = reIndexed_inds;
 
 
+
+
         cout << "Compressing..." << endl;
         vector<int> vertices_to_write;
         deltaEncodeVertices(FINAL_VERTICES, vertices_to_write, bT);
-        vector<u_int_32> indices_to_write;
+        vector<int> indices_to_write;
         int fourByters = 0;
 
         if (indCoding == IndexCoding::DELTA){
@@ -586,14 +843,17 @@ namespace Export {
         }
 
 
-
         //write
         cout << "Writing " << vertices_to_write.size() << " vertex data and " << indices_to_write.size() << " index data." << endl;
 
+        int numBytes = 0;
         if (coding == MeshEncoding::UTF)
             writeDataUTF(vertices_to_write, indices_to_write, OUT_ROOT, indCoding);
-        else
+        else if (coding == MeshEncoding::PNG)
             writeDataPNG(vertices_to_write, indices_to_write, OUT_ROOT, indCoding);
+        else if (coding == MeshEncoding::VARINT)
+            numBytes = writeDataVARINT(vertices_to_write, indices_to_write, OUT_ROOT, indCoding);
+
         writeHeader(vertices_to_write,
                       indices_to_write,
                       int(FINAL_VERTICES.size()),
@@ -606,7 +866,10 @@ namespace Export {
                       coding,
                       indCoding,
                       indCompression,
-                      max_step);
+                      max_step,
+                      numBytes,
+                      vertexQuantization,
+                      out_bV[0], out_bV[1], out_bV[2]);
     }
 
 }

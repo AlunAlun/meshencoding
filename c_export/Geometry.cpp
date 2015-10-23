@@ -42,6 +42,25 @@ namespace Geo {
         qPos.push_back(int(z * quant));
         return qPos;
     }
+    vector<int> quantizeVertexPosition(vec3 pos, AABB *aabb, int bVx, int bVy, int bVz) {
+        float x = pos.x - aabb->min.x;
+        float y = pos.y - aabb->min.y;
+        float z = pos.z - aabb->min.z;
+
+        x /= aabb->range.x;
+        y /= aabb->range.y;
+        z /= aabb->range.z;
+
+        double quantX = pow(2, bVx) - 1;
+        double quantY = pow(2, bVy) - 1;
+        double quantZ = pow(2, bVz) - 1;
+
+        vector<int> qPos;
+        qPos.push_back(int(x * quantX));
+        qPos.push_back(int(y * quantY));
+        qPos.push_back(int(z * quantZ));
+        return qPos;
+    }
 
     vector<int> quantizeVertexNormal(vec3 norm, int bits) {
         double quant = pow(2, bits) - 1;
@@ -99,6 +118,28 @@ namespace Geo {
         return qCoord;
     }
 
+    vector<vec3> computeFibonacci_sphere(int samples) {
+        int rnd = 1.0;
+        vector<vec3> points;
+        float offset = 2.0/(float)samples;
+        float increment = PI * (3.0 - sqrt(5.0));
+
+        for (int i = 0; i < samples; i++){
+            float y = ((i * offset) - 1) + (offset / 2);
+            float r = sqrt(1 - pow(y, 2));
+
+            float phi = (float)((i + rnd) % samples) * increment;
+
+            float x = cos(phi) * r;
+            float z = sin(phi) * r;
+
+            points.push_back(vec3(x,y,z));
+        }
+        return points;
+    }
+
+
+
     int getInterleavedUint(int val) {
         if (val <= 0)
             return -2 * val;
@@ -141,7 +182,7 @@ namespace Geo {
     }
 
     //http://jcgt.org/published/0003/02/01/paper-lowres.pdf
-    //https://cesiumjs.org/2015/05/18/Vertex-Compression/
+        //https://cesiumjs.org/2015/05/18/Vertex-Compression/
     //https://github.com/AnalyticalGraphicsInc/cesium/blob/master/Source/Core/AttributeCompression.js#L43
     //https://github.com/AnalyticalGraphicsInc/cesium/blob/master/Source/Core/Math.js
     vec3 octDecode_8bit(vec2 v) {

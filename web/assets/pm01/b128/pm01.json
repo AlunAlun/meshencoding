@@ -9,16 +9,16 @@
             "texture": 10,
             "vertex": 11
         },
-        "faces": 1219264,
-        "utfIndexBuffer": 3657792,
-        "vertices": 574442
+        "faces": 1118272,
+        "utfIndexBuffer": 3354818,
+        "vertices": 574428
     }],
     "data": "pm01.b128",
     "indexCoding": "highwater",
     "indexCompression": "pairedtris",
     "max_step": 3,
-    "numbytes": 13422522,
-    "size": 13422,
+    "numbytes": 12580346,
+    "size": 12580,
   "material" : {
     "diffuse_texture": "PM01-m.jpg"
   }

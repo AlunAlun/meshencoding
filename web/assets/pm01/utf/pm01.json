@@ -1,33 +1,23 @@
 {
-  "AABB": {
-    "min": [
-      -63.08654022216797,
-      -0.707988977432251,
-      -31.05078315734863
-    ],
-    "range": [
-      90.94681549072266,
-      32.66152572631836,
-      97.42430114746094
-    ]
-  },
-  "LOD": [
-    {
-      "bits": {
-        "normal": 8,
-        "texture": 10,
-        "vertex": 11
-      },
-      "faces": 1219264,
-      "utfIndexBuffer": 5354956,
-      "vertices": 574442
-    }
-  ],
-  "data": "pm01.utf8",
-  "indexCoding": "highwater",
-  "indexCompression": "pairedtris",
-  "max_step": 3,
-  "size": 15502,
+    "AABB": {
+        "min": [-63.08654022216797, -0.707988977432251, -31.05078315734863],
+        "range": [90.94681549072266, 32.66152572631836, 97.42430114746094]
+    },
+    "LOD": [{
+        "bits": {
+            "normal": 8,
+            "texture": 10,
+            "vertex": 11
+        },
+        "faces": 1118272,
+        "utfIndexBuffer": 4862148,
+        "vertices": 574428
+    }],
+    "data": "pm01.utf8",
+    "indexCoding": "highwater",
+    "indexCompression": "pairedtris",
+    "max_step": 3,
+    "size": 14452,
   "material" : {
     "diffuse_texture": "PM01-m.jpg"
   }

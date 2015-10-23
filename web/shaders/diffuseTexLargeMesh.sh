@@ -11,7 +11,9 @@ uniform mat4 u_mvp;
 uniform mat4 u_model;
 uniform mat4 u_modelt;
 
-uniform float u_wVertex;
+uniform float u_wVertexX;
+uniform float u_wVertexY;
+uniform float u_wVertexZ;
 uniform float u_wNormal;
 uniform float u_wTexture;
 uniform vec3 u_aabbMin;
@@ -50,9 +52,9 @@ void main() {
 
 	//calculate vectors in world space for lighting calculations in pixel shader
 
-	vec4 worldPos = vec4((a_vertex.x/u_wVertex)*u_aabbRange.x+u_aabbMin.x,
-						 (a_vertex.y/u_wVertex)*u_aabbRange.y+u_aabbMin.y,
-						 (a_vertex.z/u_wVertex)*u_aabbRange.z+u_aabbMin.z,
+	vec4 worldPos = vec4((a_vertex.x/u_wVertexX)*u_aabbRange.x+u_aabbMin.x,
+						 (a_vertex.y/u_wVertexY)*u_aabbRange.y+u_aabbMin.y,
+						 (a_vertex.z/u_wVertexZ)*u_aabbRange.z+u_aabbMin.z,
 						1.0); 
 	vec3 decodedNormal = octDecode(a_normal.x, a_normal.y);
 	vec4 normalPos = vec4(decodedNormal.xyz, 1.0);

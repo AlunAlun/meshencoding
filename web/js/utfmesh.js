@@ -27,10 +27,22 @@ UTFMesh.prototype.startLoad = function(filename, callback) {
 			this.meta.numLODs = this.meta.LOD.length;
 			this.LOD = 0;
 			this.meta.wValues = {
-				vertex: Math.pow(2,this.meta.LOD[this.LOD].bits.vertex),
+				vertex: {},
 				normal: Math.pow(2,this.meta.LOD[this.LOD].bits.normal),
 				texture: Math.pow(2, this.meta.LOD[this.LOD].bits.texture)
 			}
+			//assign w values to dequantize in shader
+			if (this.meta.LOD[this.LOD].vertexQuantization == "perVertex"){
+				this.meta.wValues.vertex.x = Math.pow(2,this.meta.LOD[this.LOD].bits.vertex.x);
+				this.meta.wValues.vertex.y = Math.pow(2,this.meta.LOD[this.LOD].bits.vertex.y);
+				this.meta.wValues.vertex.z = Math.pow(2,this.meta.LOD[this.LOD].bits.vertex.z);
+			}
+			else {
+				this.meta.wValues.vertex.x = Math.pow(2,this.meta.LOD[this.LOD].bits.vertex);
+				this.meta.wValues.vertex.y = Math.pow(2,this.meta.LOD[this.LOD].bits.vertex);
+				this.meta.wValues.vertex.z = Math.pow(2,this.meta.LOD[this.LOD].bits.vertex);
+			}
+
 			this.skipTexture = false;
 			if (this.meta.LOD[this.LOD].bits.texture == 0)
 				this.skipTexture = true;
@@ -363,7 +375,9 @@ UTFMesh.prototype.draw = function(view, proj, light_pos) {
 		u_materialColor: [1,1,1],
 		u_diffuse_texture: 2,
 		u_displacement_Texture: 2,
-		u_wVertex: this.meta.wValues.vertex,
+        u_wVertexX: this.meta.wValues.vertex.x,
+        u_wVertexY: this.meta.wValues.vertex.y,
+        u_wVertexZ: this.meta.wValues.vertex.z,
 		u_wNormal: this.meta.wValues.normal,
 		u_wTexture: this.meta.wValues.texture,
 		u_aabbMin: this.meta.AABB.min,

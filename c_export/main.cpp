@@ -1,8 +1,10 @@
 #include <math.h>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 #include "glm/glm.hpp"
-#include "Export.h"
+// #include "Export.h"
+#include "webmesh.h"
 #include "Geometry.h"
 
 
@@ -12,178 +14,153 @@
 
 
 using namespace std;
-using namespace glm;
+// using namespace glm;
 
-
-int main(int argc, char *argv[]) {
-
-    const string INFILEPATH = "/Users/alun/Dropbox/Work/Code/Projects/meshencoding/c_export/assets/buddha.obj";
-    const string OUT_ROOT = "buddha";
-
-    Export::exportMesh(INFILEPATH, OUT_ROOT, 11, 0,
-                       MeshEncoding::VARINT,
-                       IndexCoding::HIGHWATER,
-                       IndexCompression::PAIRED_TRIS,
-                       TriangleReordering::FORSYTH,
-                       VertexQuantization::PER_AXIS);
-
-
-
-    cout << "done!" << endl;
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+    char ** itr = std::find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
     return 0;
 }
 
-
-/*
-
-#ifdef putc_unlocked
-# define PutChar putc_unlocked
-#else
-# define PutChar putc
-#endif  // putc_unlocked
-
-const char *byte_to_binary(unsigned x)
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
 {
-    static char b[9];
-    b[0] = '\0';
+    return std::find(begin, end, option) != end;
+}
 
-    int z;
-    for (z = 128; z > 0; z >>= 1)
-    {
-        strcat(b, ((x & z) == z) ? "1" : "0");
+int main(int argc, char *argv[]) {
+
+    printf("\nB128 WebMesh Generator (c) Alun Evans.\n Version 1.0.\n\n");
+
+    if (argc < 3) {
+        printf("Usage: ./webmesh options <input_file.obj> <outputfile>\n\n");
+        printf("Options:\n");
+        printf("-prog : creates a progressive mesh with default settings. All other options ignored.\n\n");
+        printf("-b <value> : bits of precision for position, normals and textures. Default is 12\n\n");
+        printf("-bV <value> : bits of quantisation for vertex positions. Default 12.\n\n");
+        printf("-bN <value> : bits of quantisation for vertex normals (only used with normal quantisation). Default 12.\n\n");
+        printf("-bT <value> : bits of quantisation for texture coordinates. Default 12.\n\n");
+        printf("-co <delta|hwm> : Use either delta or high-watermark encoding for index buffer: Default hwm\n\n");
+        printf("-tc <none|paired_tris> : Specify to use paired triangle index compression. Default paired_tris.\n\n");
+        printf("-to <none|forsyth|tipsify> : Specify which triangle reordering algorithm. Default forsyth.\n\n");
+        printf("-vq <global|per_axis>: Decide whether to adjust vertex quantisation precision based on axis length. Default per_axis.\n\n");
+        printf("-n <quant|oct|fib>: Specify which method to use to encode normals. Default oct.\n\n");
+        printf("-fib <value>. Number of normals to create in fibonacci sphere normals. Default 4096\n");
+        printf("\n");
+        return 0;
     }
 
-    return b;
-}
+    const string INFILEPATH = argv[argc-2];
+    const string OUT_ROOT = argv[argc-1];
 
-char * int2bin(int i)
-{
-    size_t bits = sizeof(int) * CHAR_BIT;
+    
+    bool progressive= cmdOptionExists(argv, argv + argc, "-prog");
+    
+    if (!progressive) {
+        WebMesh wm(INFILEPATH, OUT_ROOT);
+        
+        char *op = getCmdOption(argv, argv + argc, "-b");
+        if (op) wm.setQuantizationBitDepth(atoi(op), atoi(op), atoi(op));
 
-    char * str = (char*) malloc(bits + 1);
-    if(!str) return NULL;
-    str[bits] = 0;
+        op = getCmdOption(argv, argv + argc, "-bV");
+        if (op) wm.setQuantizationBitDepthPosition(atoi(op));
 
-    // type punning because signed shift is implementation-defined
-    unsigned u = *(unsigned *)&i;
-    for(; bits--; u >>= 1)
-        str[bits] = u & 1 ? '1' : '0';
+        op = getCmdOption(argv, argv + argc, "-bN");
+        if (op) wm.setQuantizationBitDepthNormal(atoi(op));
 
-    return str;
-}
+        op = getCmdOption(argv, argv + argc, "-bT");
+        if (op) wm.setQuantizationBitDepthTexture(atoi(op));
+
+        op = getCmdOption(argv, argv + argc, "-co");
+        if (op) {
+            if (!strcmp(op, "delta")) wm.setIndexCoding(IndexCoding::DELTA);
+            else if (!strcmp(op,"hwm")) wm.setIndexCoding(IndexCoding::HIGHWATER);
+        }
+
+        op = getCmdOption(argv, argv + argc, "-tc");
+        if (op) {
+            if (!strcmp(op,"none")) wm.setIndexCompression(IndexCompression::NONE);
+            else if (!strcmp(op, "paired_tris")) wm.setIndexCompression(IndexCompression::PAIRED_TRIS);
+        }
+
+        op = getCmdOption(argv, argv + argc, "-to");
+        if (op) {
+            cout << op << endl;
+            if (!strcmp(op,"none")) {wm.setTriangleReordering(TriangleReordering::NONE);printf("lol");}
+            else if (!strcmp(op,"forsyth")) wm.setTriangleReordering(TriangleReordering::FORSYTH);
+            else if (!strcmp(op,"tipsify")) wm.setTriangleReordering(TriangleReordering::TIPSIFY);
+        }
+
+        op = getCmdOption(argv, argv + argc, "-vq");
+        if (op) {
+            if (!strcmp(op,"global")) wm.setVertexQuantization(VertexQuantization::GLOBAL);
+            else if (!strcmp(op , "per_axis")) wm.setVertexQuantization(VertexQuantization::PER_AXIS);
+        }
+
+        op = getCmdOption(argv, argv + argc, "-n");
+        if (op) {
+            if (!strcmp(op,"quant")) wm.setNormalEncoding(NormalEncoding::QUANT);
+            else if (!strcmp(op,"oct")) wm.setNormalEncoding(NormalEncoding::OCT);
+            else if (!strcmp(op,"fib")) wm.setNormalEncoding(NormalEncoding::FIB);
+        }
+
+        op = getCmdOption(argv, argv + argc, "-fib");
+        if (op) {
+            wm.setFibLevels(atoi(op));
+        }
+
+        wm.exportMesh(true); 
+
+    } 
+    else { // progressive with defaults
+        printf("Creating progressive mesh with defaults.\n\n");
+
+        WebMesh webMesh1(INFILEPATH, OUT_ROOT+"_a");
+        webMesh1.setQuantizationBitDepth(7,7,8);
+        webMesh1.setNormalEncoding(NormalEncoding::FIB);
+        webMesh1.setFibLevels(256);
+        json metadata1 = webMesh1.exportMesh(false); 
+
+        WebMesh webMesh2(INFILEPATH, OUT_ROOT+"_b");
+        webMesh2.setQuantizationBitDepth(8,8,11);
+        webMesh2.setNormalEncoding(NormalEncoding::FIB);
+        webMesh2.setFibLevels(256);
+        json metadata2 = webMesh2.exportMesh(false); 
+
+        WebMesh webMesh3(INFILEPATH, OUT_ROOT+"_c");
+        webMesh3.setQuantizationBitDepth(11,11,11);
+        webMesh3.setNormalEncoding(NormalEncoding::OCT);
+        webMesh3.setFibLevels(256);
+        json metadata3 = webMesh3.exportMesh(false); 
 
 
-void write_varint(unsigned value, FILE* file) {
-    if (value < 0x80) {
-        PutChar(static_cast<char>(value), file);
+        json LODS(json::an_array);
+        LODS.add(metadata1["meshes"]);
+        LODS.add(metadata2["meshes"]);
+        LODS.add(metadata3["meshes"]);
 
-    } else if( value < 0x4000) {
+        json mats = metadata1["materials"];
 
-        unsigned char firstByte = (static_cast<char>(value) & 0x7F); // first seven bits
-        firstByte |= 1 << 7;
-        PutChar(static_cast<char>(firstByte), file);
+        json rootJSON;
+        rootJSON["progressive"] = LODS;
+        rootJSON["materials"] = mats;
+        ofstream jsonFile;
+        jsonFile.open (OUT_ROOT + ".json");
+        jsonFile << rootJSON;
+        jsonFile.close();
 
-        unsigned shiftVal = value >> 7; //shift off first 7 bits
-        char secondByte = (static_cast<char>(shiftVal) & 0x7F); // next seven bits
-        PutChar(static_cast<char>(secondByte), file);
+        //now concatenate files
+        // std::ifstream if_a(OUT_ROOT+"_a.b128", std::ios_base::binary);
+        // std::ifstream if_b(OUT_ROOT+"_b.b128", std::ios_base::binary);
+        // std::ifstream if_c(OUT_ROOT+"_c.b128", std::ios_base::binary);
+        // std::ofstream of_d(OUT_ROOT+".b128", std::ios_base::binary);
 
-
-    } else if (value < 0x200000) {
-        unsigned char firstByte = (static_cast<char>(value) & 0x7F); // first seven bits
-        firstByte |= 1 << 7;
-        PutChar(static_cast<char>(firstByte), file);
-
-        unsigned shiftVal = value >> 7; //shift off first 7 bits
-        unsigned char secondByte = (static_cast<char>(shiftVal) & 0x7F); // next seven bits
-        secondByte |= 1 << 7;
-        PutChar(static_cast<char>(secondByte), file);
-
-        shiftVal = value >> 14; //shift off first 14 bits
-        unsigned char thirdByte = (static_cast<char>(shiftVal) & 0x7F); // next seven bits
-        PutChar(static_cast<char>(thirdByte), file);
+        // of_d << if_a.rdbuf() << if_b.rdbuf() << if_c.rdbuf();
     }
+    
+    cout << "done!" << endl;
+    return 0;
 }
-
-char *readFile(char *fileName) {
-    FILE *file = fopen(fileName, "r");
-    char *code;
-    size_t n = 0;
-    int c;
-
-    if (file == NULL) return NULL; //could not open file
-    fseek(file, 0, SEEK_END);
-    long f_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    code = (char*)malloc(f_size);
-
-    while ((c = fgetc(file)) != EOF) {
-        code[n++] = (char)c;
-    }
-
-    code[n] = '\0';
-
-    return code;
-}
-
-*/
-
-
-
-//    FILE * varintFile;
-//
-//    varintFile = fopen ("test.vint","w");
-//    if (varintFile!=NULL) {
-//        int theVal = 67904;
-//        write_varint(theVal, varintFile);
-//        printf("tv %s\n", int2bin(theVal));
-//        fclose(varintFile);
-//    }
-//
-//    char* inBuffer = readFile("test.vint");
-//    unsigned char c1, c2, c3, c4, c5;
-//    uint32 i1, i2, i3, i4, i5, result;
-//    size_t n = 0;
-//    size_t counter = 0;
-//
-//    while ( (c1 = inBuffer[n++]) != '\0') {
-//
-//        if ( (c1 & 0x80) ) { // first bit is set, so we need to read another byte
-//            c2 = inBuffer[n++]; //get next byte
-//            if (c2 & 0x80) { // first bit is set, so we need to read a third byte
-//                c3 = inBuffer[n++];
-//
-//                printf("c1 %s\n", byte_to_binary(c1));
-//                printf("c2 %s\n", byte_to_binary(c2));
-//                printf("c3 %s\n", byte_to_binary(c3));
-//
-//
-//                i1 = c1; //cast first byte to uint32
-//                printf("i1 %s\n", int2bin(i1));
-//                i1 &= ~(1 << 7); // set marker bit of i1 to zero
-//                printf("1m %s\n", int2bin(i1));
-//
-//                i2 = c2 << 7; //cast second byte to uint32
-//                printf("i2 %s\n", int2bin(i2));
-//                i2 &= ~(1 << 14); // set marker bit of i2 to zero
-//                printf("2m %s\n", int2bin(i2));
-//
-//                printf("i3 %s\n", int2bin(i3));
-//                i3 = c3 << 14; //cast third byte to uint32
-//                printf("3m %s\n", int2bin(i3));
-//
-//                result = i1 | i2 | i3;
-//                printf("result is: %d\n", result);
-//            }
-//            else { // process the twy bytes
-//                i1 = c1; //cast first byte to uint32
-//                i1 &= ~(1 << 7); // set marker bit of i1 to zero
-//                i2 = c2 << 7; //cast second byte to uint32
-//                result = i1 | i2; // join both chars
-//                printf("result is: %d\n", result);
-//            }
-//
-//
-//
-//        }
-//
-//    }

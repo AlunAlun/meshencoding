@@ -25,7 +25,7 @@
 
 // Set these to adjust the performance and result quality
 #define VERTEX_CACHE_SIZE 8
-#define CACHE_FUNCTION_LENGTH 32
+#define CACHE_FUNCTION_LENGTH 64
 
 // The size of these data types affect the memory usage
 typedef uint16_t ScoreType;

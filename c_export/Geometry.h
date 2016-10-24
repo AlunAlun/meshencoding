@@ -8,12 +8,18 @@
 
 #include <iostream>
 #include <vector>
+#include <queue>
 #include <math.h>
 #include "glm/glm.hpp"
 
 
 using namespace std;
 using namespace glm;
+
+typedef unsigned char uint8;
+typedef unsigned short uint16;
+typedef short int16;
+typedef unsigned int uint32;
 
 const float PI = 3.1415927;
 
@@ -34,8 +40,9 @@ struct Face{
 
 struct Vertex {
     vec3 pos;
-    vec3 normal;
-    vec2 normal2;
+    vec3 normal; //standard 3 channel normal
+    vec2 normal2; //octahedral normal
+    int normal1; //index into fibonacci sphere
     vec3 color;
     vec2 texture;
     Vertex(vec3 _pos) {
@@ -45,10 +52,10 @@ struct Vertex {
 
     }
     bool operator < (const Vertex &b)const {
-        return tie(pos.x, pos.y, pos.z) < tie(b.pos.x, b.pos.y, b.pos.z);
+        return tie(pos.x, pos.y, pos.z, texture.x, texture.y) < tie(b.pos.x, b.pos.y, b.pos.z, b.texture.x, b.texture.y);
     }
     bool operator == (const Vertex& b)const{
-        return pos.x == b.pos.x && pos.y == b.pos.y && pos.z == b.pos.z ? true : false;
+        return pos.x == b.pos.x && pos.y == b.pos.y && pos.z == b.pos.z && texture.x == b.texture.x && texture.y == b.texture.y ? true : false;
     }
 };
 
@@ -61,6 +68,12 @@ struct AABB {
     }
 };
 
+enum IndexBufferTriangleCodes
+{
+    IB_INDEX_NEW = 0,
+    IB_INDEX_CACHED = 1
+};
+
 namespace Geo {
     AABB* getAABB(vector<Vertex*> verts);
     vector<int> quantizeVertexPosition(vec3 pos, AABB* aabb, int bits);
@@ -69,6 +82,7 @@ namespace Geo {
     vector<int> quantizeVertexNormal_to_vec2(vec3 norm, int bits);
     vector<int> quantizeVertexTexture(vec2 coord, int bits);
     vector<vec3> computeFibonacci_sphere(int samples);
+    int computeFibonacci_normal(vec3 norm, vector<vec3> &fibSphere);
     int getInterleavedUint(int val);
     vec2 octEncode_8bit(vec3 v);
     vec3 octDecode_8bit(vec2 v);
@@ -76,6 +90,8 @@ namespace Geo {
     float signNotZero(float value);
     int toSNorm(float value);
     float fromSNorm(int value);
+    void compressIndexBuffer(vector<int>& inds_in, vector<int>&inds_out);
+    void compressIndexBufferFIFO(vector<int>& inds_in, vector<int>&inds_out);
 }
 
 #endif //C_EXPORT_GEOMETRY_H

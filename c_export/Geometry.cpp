@@ -34,12 +34,12 @@ namespace Geo {
         y /= aabb->range.y;
         z /= aabb->range.z;
 
-        double quant = pow(2, bits) - 1;
+        double quant = pow(2, bits);
 
         vector<int> qPos;
-        qPos.push_back(int(x * quant));
-        qPos.push_back(int(y * quant));
-        qPos.push_back(int(z * quant));
+        qPos.push_back(round(x * quant));
+        qPos.push_back(round(y * quant));
+        qPos.push_back(round(z * quant));
         return qPos;
     }
     vector<int> quantizeVertexPosition(vec3 pos, AABB *aabb, int bVx, int bVy, int bVz) {
@@ -51,14 +51,14 @@ namespace Geo {
         y /= aabb->range.y;
         z /= aabb->range.z;
 
-        double quantX = pow(2, bVx) - 1;
-        double quantY = pow(2, bVy) - 1;
-        double quantZ = pow(2, bVz) - 1;
+        double quantX = pow(2, bVx);
+        double quantY = pow(2, bVy);
+        double quantZ = pow(2, bVz);
 
         vector<int> qPos;
-        qPos.push_back(int(x * quantX));
-        qPos.push_back(int(y * quantY));
-        qPos.push_back(int(z * quantZ));
+        qPos.push_back(round(x * quantX));
+        qPos.push_back(round(y * quantY));
+        qPos.push_back(round(z * quantZ));
         return qPos;
     }
 
@@ -106,13 +106,9 @@ namespace Geo {
     }
 
     vector<int> quantizeVertexTexture(vec2 coord, int bits) {
-        int quant = (int) pow(2, bits) - 1;
-        if (coord.x > 1.0) coord.x = 1.0;
-        if (coord.x < 0.0) coord.x = 0.0;
-        if (coord.y > 1.0) coord.y = 1.0;
-        if (coord.y < 0.0) coord.y = 0.0;
-
         vector<int> qCoord;
+        
+        int quant = (int) pow(2, bits);
         qCoord.push_back(int(coord.x * quant));
         qCoord.push_back(int(coord.y * quant));
         return qCoord;
@@ -138,6 +134,24 @@ namespace Geo {
         return points;
     }
 
+    int computeFibonacci_normal(vec3 theNorm, vector<vec3> &fibSphere) {
+        vec3 norm = glm::normalize(theNorm);
+        //get dot products of all fib vectors with norm
+        float maxDP = -1.0;
+        int maxIndex = -1;
+        float dp;
+        for (size_t i = 0; i < fibSphere.size(); i++) {
+            dp = glm::dot(norm, fibSphere[i]);
+            if (dp > maxDP){
+                maxDP = dp;
+                maxIndex = i;
+            }
+        }
+        // printf("%.2f %.2f %.2f : %.2f %.2f %.2f\n", theNorm.x, theNorm.y, theNorm.z,
+        //                         fibSphere[maxIndex].x, fibSphere[maxIndex].y, fibSphere[maxIndex].z);
+        //now minIndex is the index in the fibonacci sphere which contains the nearest normal
+        return maxIndex;
+    }
 
 
     int getInterleavedUint(int val) {
@@ -198,4 +212,115 @@ namespace Geo {
 
         return normalize(vec3(rX, rY, rZ));
     }
+
+        void add_tri(std::vector<int>& out_inds, int a, int b, int c)
+    {
+        assert(a >= b);
+        out_inds.push_back(a);
+        out_inds.push_back(b);
+        out_inds.push_back(c);
+    }
+
+    void add_double_tri(std::vector<int>& out_inds, int a, int b, int c, int d)
+    {
+        assert(a < b);
+        out_inds.push_back(a);
+        out_inds.push_back(b);
+        out_inds.push_back(c);
+        out_inds.push_back(d);
+    }
+
+    bool try_merge_with_next(std::vector<int>& out_inds, const std::vector<int>& inds, size_t base)
+    {
+        // is there even a next tri?
+        if (base + 3 >= inds.size())
+            return false;
+
+        // is this tri degenerate?
+        const int *tri = &inds[base];
+        if (tri[0] == tri[1] || tri[1] == tri[2] || tri[2] == tri[0])
+            return false;
+
+        // does the next tri contain the opposite of at least one
+        // of our edges?
+        const int *next = &inds[base + 3];
+
+        // go through 3 edges of tri
+        for (int i = 0; i < 3; i++)
+        {
+            // try to find opposite of edge ab, namely ba.
+            int a = tri[i];
+            int b = tri[(i + 1) % 3];
+            int c = tri[(i + 2) % 3];
+
+            for (int j = 0; j < 3; j++)
+            {
+                if (next[j] == b && next[(j + 1) % 3] == a)
+                {
+                    int d = next[(j + 2) % 3];
+
+                    if (a < b)
+                        add_double_tri(out_inds, a, b, c, d);
+                    else // must be c > a, since we checked that a != c above; this ends up swapping two tris.
+                        add_double_tri(out_inds, b, a, d, c);
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    void compressIndexBuffer(vector<int>& inds_in, vector<int>&inds_out) {
+        for (size_t base = 0; base < inds_in.size(); ) {
+            if (try_merge_with_next(inds_out, inds_in, base))
+                base += 6; // packed two triangles
+            else {
+                const int *tri = &inds_in[base];
+                if (tri[0] >= tri[1])
+                    add_tri(inds_out, tri[0], tri[1], tri[2]);
+                else if (tri[1] >= tri[2])
+                    add_tri(inds_out, tri[1], tri[2], tri[0]);
+                else
+                {
+                    // must have tri[2] >= tri[0],
+                    // otherwise we'd have tri[0] < tri[1] < tri[2] < tri[0] (contradiction)
+                    add_tri(inds_out, tri[2], tri[0], tri[1]);
+                }
+                base += 3;
+            }
+        }
+    }
+
+    //does not remotely work
+    void compressIndexBufferFIFO(vector<int>& inds_in, vector<int>&inds_out) {
+        int CACHE_SIZE = 32;
+        uint32 cache[CACHE_SIZE];
+        for (size_t i = 0; i < inds_in.size(); i++) {
+            uint32 currIndex = inds_in[i];
+
+            //search cache
+            int found = -1;
+            for (size_t j = 0; j < CACHE_SIZE; j++) {
+                if (cache[j] == currIndex)
+                    found = j;
+            }
+            if (found >= 0) {
+                inds_out.push_back(found); // push index in cache
+            }
+            else {
+
+                inds_out.push_back(currIndex);
+                //update cache
+                for (size_t j = 0; j < CACHE_SIZE-1; j++) {
+                    cache[j+1] = cache[j];
+                }
+                cache[0] = currIndex;
+            }
+        }
+    }
+
+
+
 }

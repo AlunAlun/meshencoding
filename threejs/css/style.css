@@ -1,0 +1,25 @@
+body {
+	margin: 0; 
+	padding:0; 
+	overflow:hidden;
+}
+
+#container {
+	width:100vw; 
+	height:100vh;
+}
+
+#toolbar {
+	position:absolute;
+	top:0; left:0;
+	z-index: 10;
+	opacity: 0.5;
+	background-color: #FFF;
+	width:100vw; 
+	height:40px;
+}
+
+#rotateX {
+	float:right;
+	margin: 5px 10px;
+}

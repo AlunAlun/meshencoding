@@ -1,5 +1,3 @@
-
-
 //global variables
 var renderer;
 var rendererContainer;
@@ -20,10 +18,10 @@ function createRenderer() {
 
 function createCamera() {
     camera = new THREE.PerspectiveCamera(
-            45,
-            rendererContainer.offsetWidth / rendererContainer.offsetHeight,
-            0.1, 10000);
-    
+        45,
+        rendererContainer.offsetWidth / rendererContainer.offsetHeight,
+        0.1, 10000);
+
 
     camera.position.z = 2;
 
@@ -33,51 +31,51 @@ function createCamera() {
 }
 
 function createLights() {
-    var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.7 );
-    directionalLight.position.set( 1, 1, 0 );
-    scene.add( directionalLight );
+    var directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    directionalLight.position.set(1, 1, 0);
+    scene.add(directionalLight);
 
     // var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.8 );
     // directionalLight.position.set( -0.25, -0.25, 1 );
     // scene.add( directionalLight );
 
-    var directionalLight2 = new THREE.DirectionalLight( 0xffffff, 0.3 );
-    directionalLight2.position.set( -1, 0, 1 );
-    scene.add( directionalLight2 );
+    var directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+    directionalLight2.position.set(-1, 0, 1);
+    scene.add(directionalLight2);
 
-    var light = new THREE.AmbientLight( 0x222222 ); // soft white light 404040
-    scene.add( light );
+    var light = new THREE.AmbientLight(0x222222); // soft white light 404040
+    scene.add(light);
 }
 
 function setCameraFromObject(obj) {
-    var fov = camera.fov * ( Math.PI / 180 ); 
+    var fov = camera.fov * (Math.PI / 180);
     var bbox = new THREE.Box3().setFromObject(obj);
     camera.position.set(0,
-                        bbox.min.y+((bbox.max.y-bbox.min.y)/2),
-                        obj.position.z + Math.abs( (bbox.max.y-bbox.min.y) / Math.sin( fov / 2 ) ));
+        bbox.min.y + ((bbox.max.y - bbox.min.y) / 2),
+        obj.position.z + Math.abs((bbox.max.y - bbox.min.y) / Math.sin(fov / 2)));
 
     //obj.position.y -= (bbox.max.y-bbox.min.y)/3;
-    cameraControl.target = new THREE.Vector3(bbox.min.x+((bbox.max.x-bbox.min.x)/2),
-                                             bbox.min.y+((bbox.max.y-bbox.min.y)/2),
-                                             bbox.min.z+((bbox.max.z-bbox.min.z)/2));
-                                  
+    cameraControl.target = new THREE.Vector3(bbox.min.x + ((bbox.max.x - bbox.min.x) / 2),
+        bbox.min.y + ((bbox.max.y - bbox.min.y) / 2),
+        bbox.min.z + ((bbox.max.z - bbox.min.z) / 2));
+
 }
 
 function loadModel(file) {
 
-    var onLoadFirstMesh = function( b128 ) {
+    var onLoadFirstMesh = function(b128) {
 
-        scene.remove( mainObject );
+        scene.remove(mainObject);
         mainObject = b128;
-        scene.add( mainObject );
+        scene.add(mainObject);
 
         //mainObject.children[0].material = new THREE.MeshLambertMaterial({color:0xffffff});
 
         if (hasSetCamera == false) {
 
-            setCameraFromObject( mainObject );
+            setCameraFromObject(mainObject);
 
-                       
+
             hasSetCamera = true;
 
         }
@@ -85,7 +83,7 @@ function loadModel(file) {
     }
 
 
-    b128Loader = new THREE.B128Loader();//{material:"basic"}
+    b128Loader = new THREE.B128Loader(); //{material:"basic"}
     b128Loader.load(file, onLoadFirstMesh);
 
 }
@@ -96,7 +94,7 @@ function init(file) {
     rendererContainer = document.getElementById("container");
 
     scene = new THREE.Scene();
-    
+
     clock = new THREE.Clock();
 
     createRenderer();
@@ -121,11 +119,11 @@ function render() {
  */
 function getQueryParams(qs) {
     qs = qs.split("+").join(" ");
-    var params = {}, tokens,
+    var params = {},
+        tokens,
         re = /[?&]?([^=]+)=([^&]*)/g;
     while (tokens = re.exec(qs)) {
-        params[decodeURIComponent(tokens[1])]
-            = decodeURIComponent(tokens[2]);
+        params[decodeURIComponent(tokens[1])] = decodeURIComponent(tokens[2]);
     }
     return params;
 }
@@ -146,13 +144,9 @@ var GUI = {
     init: function() {
         if (this.buttons.rotateX) {
             this.buttons.rotateX.addEventListener("click", function() {
-                mainObject.rotateX(Math.PI/2);
+                mainObject.rotateX(Math.PI / 2);
             })
         }
     }
 }
 GUI.init();
-
-
-
-

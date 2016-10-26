@@ -1,780 +1,807 @@
 /**
  * @author Alun Evans / http://alunevans.info/
+ v1.0
  */
 
-THREE.B128Loader = function( options, manager ) {
+THREE.B128Loader = function(options, manager) {
 
-	this.options = options || {};
-	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
-	this.sourceFileOffset = 0;
+    this.options = options || {};
+    this.manager = (manager !== undefined) ? manager : THREE.DefaultLoadingManager;
+    this.sourceFileOffset = 0;
 
 };
 
 THREE.B128Loader.prototype = {
 
-	constructor: THREE.B128Loader,
+    constructor: THREE.B128Loader,
 
-	load: function( url, onLoad, onProgress, onError ) {
+    load: function(url, onLoad, onProgress, onError) {
 
-		var scope = this;
+        var scope = this;
 
-		splPath = this.splitPath( url );
-		this.filepath = splPath.dirPart;
+        splPath = this.splitPath(url);
+        this.filepath = splPath.dirPart;
 
 
 
 
-		var loader = new THREE.XHRLoader( scope.manager );
-		loader.setCrossOrigin( this.crossOrigin );
-		loader.load( url, function( text ) {
+        var loader = new THREE.XHRLoader(scope.manager);
+        loader.setCrossOrigin(this.crossOrigin);
+        loader.load(url, function(text) {
 
-			scope.parseJSON( text, onLoad );
+            scope.parseJSON(text, onLoad);
 
-		}, onProgress, onError );
+        }, onProgress, onError);
 
-	},
+    },
 
-	setCrossOrigin: function( value ) {
+    setCrossOrigin: function(value) {
 
-		this.crossOrigin = value;
+        this.crossOrigin = value;
 
-	},
+    },
 
-	parseJSON: function( text, onload ) {
+    parseJSON: function(text, onload) {
 
-		this.theJSON = JSON.parse( text );
+        this.theJSON = JSON.parse(text);
 
-		//create materials
-		this.createTHREEMaterials( this.theJSON.materials );
+        //create materials
+        this.createTHREEMaterials(this.theJSON.materials);
 
-		if ( this.theJSON.progressive ) {
+        if (this.theJSON.progressive) {
 
-			var scope = this;
-			var loadNextMeshCallback = function() {
+            var scope = this;
+            var loadNextMeshCallback = function() {
 
-				if ( scope.currLOD < scope.theJSON.progressive.length-1 ) {
-					
-					scope.currLOD++;
-					scope.loadOneObject( scope.theJSON.progressive[ scope.currLOD ], onload, loadNextMeshCallback); 
+                if (scope.currLOD < scope.theJSON.progressive.length - 1) {
 
-				}
-			}
+                    scope.currLOD++;
+                    scope.loadOneObject(scope.theJSON.progressive[scope.currLOD], onload, loadNextMeshCallback);
 
-			this.currLOD = 0;
-			this.loadOneObject(this.theJSON.progressive[ this.currLOD ], onload, loadNextMeshCallback);
-			
-			
-		} else { //single mesh only
+                }
+            }
 
-			this.loadOneObject(this.theJSON.meshes, onload);
+            this.currLOD = 0;
+            this.loadOneObject(this.theJSON.progressive[this.currLOD], onload, loadNextMeshCallback);
 
-		}
 
-	},
+        } else { //single mesh only
 
-	loadOneObject: function( jsonMeshes, passThroughLoadCallback, loadNextMeshCallback ) {
+            this.loadOneObject(this.theJSON.meshes, onload);
 
+        }
 
-		for ( var i in jsonMeshes ) {
+    },
 
-			jsonMeshes[ i ].wValues = {
-				vertex:  {},
-				normal:  Math.pow( 2, jsonMeshes[ i ].bits.normal  ),
-				texture: Math.pow( 2, jsonMeshes[ i ].bits.texture )
-			}
-			//assign w values to dequantize in shader
-			if ( jsonMeshes[ i ].vertexQuantization == "perVertex" ) {
+    loadOneObject: function(jsonMeshes, passThroughLoadCallback, loadNextMeshCallback) {
 
-				jsonMeshes[ i ].wValues.vertex.x = Math.pow( 2, jsonMeshes[ i ].bits.vertex.x );
-				jsonMeshes[ i ].wValues.vertex.y = Math.pow( 2, jsonMeshes[ i ].bits.vertex.y );
-				jsonMeshes[ i ].wValues.vertex.z = Math.pow( 2, jsonMeshes[ i ].bits.vertex.z );
 
-			}
-			else {
+        for (var i in jsonMeshes) {
 
-				jsonMeshes[ i ].wValues.vertex.x = Math.pow( 2, jsonMeshes[ i ].bits.vertex );
-				jsonMeshes[ i ].wValues.vertex.y = Math.pow( 2, jsonMeshes[ i ].bits.vertex );
-				jsonMeshes[ i ].wValues.vertex.z = Math.pow( 2, jsonMeshes[ i ].bits.vertex );
+            jsonMeshes[i].wValues = {
+                    vertex: {},
+                    normal: Math.pow(2, jsonMeshes[i].bits.normal),
+                    texture: Math.pow(2, jsonMeshes[i].bits.texture)
+                }
+                //assign w values to dequantize in shader
+            if (jsonMeshes[i].vertexQuantization == "perVertex") {
 
-			}
+                jsonMeshes[i].wValues.vertex.x = Math.pow(2, jsonMeshes[i].bits.vertex.x);
+                jsonMeshes[i].wValues.vertex.y = Math.pow(2, jsonMeshes[i].bits.vertex.y);
+                jsonMeshes[i].wValues.vertex.z = Math.pow(2, jsonMeshes[i].bits.vertex.z);
 
-			jsonMeshes[ i ].skipTexture = false;
-			if ( jsonMeshes[ i ].bits.texture == 0 )
-			jsonMeshes[ i ].skipTexture = true;
+            } else {
 
-		}
+                jsonMeshes[i].wValues.vertex.x = Math.pow(2, jsonMeshes[i].bits.vertex);
+                jsonMeshes[i].wValues.vertex.y = Math.pow(2, jsonMeshes[i].bits.vertex);
+                jsonMeshes[i].wValues.vertex.z = Math.pow(2, jsonMeshes[i].bits.vertex);
 
-		var xhr = new XMLHttpRequest();
-		xhr.open( 'GET', this.filepath + jsonMeshes[ 0 ].data );
-		xhr.responseType = "arraybuffer";
-		xhr.onload = function() {
+            }
 
-			var arrayBuffer = xhr.response;
+            jsonMeshes[i].skipTexture = false;
+            if (jsonMeshes[i].bits.texture == 0)
+                jsonMeshes[i].skipTexture = true;
 
-			if ( ! arrayBuffer ) {
+        }
 
-				console.log( "no b128 data!" ); return;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', this.filepath + jsonMeshes[0].data);
+        xhr.responseType = "arraybuffer";
+        xhr.onload = function() {
 
-			}
-			//start parsing this data
-			this.parseB128( arrayBuffer, jsonMeshes, passThroughLoadCallback )
+            var arrayBuffer = xhr.response;
 
-			//set new file flag
-			this.newFile = true;
+            if (!arrayBuffer) {
 
-			//if progressive, start downloading next mesh
-			if (loadNextMeshCallback)
-				loadNextMeshCallback();
+                console.log("no b128 data!");
+                return;
 
+            }
+            //start parsing this data
+            this.parseB128(arrayBuffer, jsonMeshes, passThroughLoadCallback)
 
-		}.bind( this );
-		xhr.onprogress = this.onLoadProgress;
-		xhr.send();
+            //set new file flag
+            this.newFile = true;
 
-	},
+            //if progressive, start downloading next mesh
+            if (loadNextMeshCallback)
+                loadNextMeshCallback();
 
-	parseB128: function( arrayBuffer, jsonMeshes, onLoad ) {
 
-		console.time( 'B128Loader' );
+        }.bind(this);
+        xhr.onprogress = this.onLoadProgress;
+        xhr.send();
 
-		//cast buffer to a Uint8 array
-		var byteArray = new Uint8Array( arrayBuffer );
+    },
 
-		//size in bytes of byteArray is obviously same as number of elements
-		//(cos it's Uint8)
+    parseB128: function(arrayBuffer, jsonMeshes, onLoad) {
 
-		var data = new Uint32Array( byteArray.length );
+        console.time('B128Loader');
 
-		var n = 0;
-		var counter = 0;
+        //cast buffer to a Uint8 array
+        var byteArray = new Uint8Array(arrayBuffer);
 
-		var c1, c2, c3;
-		var i = new Uint32Array( 3 ); //use this for faster bit shifting
-		while ( counter < byteArray.length ) {
+        //size in bytes of byteArray is obviously same as number of elements
+        //(cos it's Uint8)
 
-			var c1 = byteArray[ n ++ ];
-			if ( c1 & 0x80 ) {
+        var data = new Uint32Array(byteArray.length);
 
-				//first bit is set, so we need to read another byte
-				c2 = byteArray[ n ++ ];
-				if ( c2 & 0x80 ) {
+        var n = 0;
+        var counter = 0;
 
-					c3 = byteArray[ n ++ ];
-					i[ 0 ] = c1; //cast first byte to uint32
-					i[ 0 ] &= ~ ( 1 << 7 ); // reset marker bit to 0
+        var c1, c2, c3;
+        var i = new Uint32Array(3); //use this for faster bit shifting
+        while (counter < byteArray.length) {
 
-					i[ 1 ] = c2 << 7; //cast second byte uint32
-					i[ 1 ] &= ~ ( 1 << 14 ); //reset marker bit
+            var c1 = byteArray[n++];
+            if (c1 & 0x80) {
 
-					i[ 2 ] = c3 << 14;
+                //first bit is set, so we need to read another byte
+                c2 = byteArray[n++];
+                if (c2 & 0x80) {
 
-					data[ counter ++ ] = i[ 0 ] | i[ 1 ] | i[ 2 ]; //join all three
+                    c3 = byteArray[n++];
+                    i[0] = c1; //cast first byte to uint32
+                    i[0] &= ~(1 << 7); // reset marker bit to 0
 
-				}
-				else {
+                    i[1] = c2 << 7; //cast second byte uint32
+                    i[1] &= ~(1 << 14); //reset marker bit
 
-					i[ 0 ] = c1; //cast first byte to uint32
-					i[ 0 ] &= ~ ( 1 << 7 ); //set marker bit to 0
-					i[ 1 ] = c2 << 7; //cast second byte to uint32
-					data[ counter ++ ] = i[ 0 ] | i[ 1 ]; //join both
+                    i[2] = c3 << 14;
 
-				}
+                    data[counter++] = i[0] | i[1] | i[2]; //join all three
 
-			}
-			else
-			data[ counter ++ ] = c1;
+                } else {
 
-		}
+                    i[0] = c1; //cast first byte to uint32
+                    i[0] &= ~(1 << 7); //set marker bit to 0
+                    i[1] = c2 << 7; //cast second byte to uint32
+                    data[counter++] = i[0] | i[1]; //join both
 
-		var meshObjects = []; 
-		for ( var i in jsonMeshes )
-			this.parseOneMeshData( data, jsonMeshes[ i ], meshObjects ); //meshObjects will be filled
+                }
 
-		this.createTHREEMeshes( meshObjects, onLoad )
+            } else
+                data[counter++] = c1;
 
-	},
+        }
 
-	parseOneMeshData: function( data, meshMeta, meshObjects ) {
+        var meshObjects = [];
+        for (var i in jsonMeshes)
+            this.parseOneMeshData(data, jsonMeshes[i], meshObjects); //meshObjects will be filled
 
-		var newBuffers = {};
-		var aabbMin = meshMeta.AABB.min;
-		var aabbRange = meshMeta.AABB.range;
-		var currNumVerts = meshMeta.vertices;
-		var currNumIndices = meshMeta.indexBufferSize;
-		var utfIndexBuffer = meshMeta.utfIndexBuffer;
+        this.createTHREEMeshes(meshObjects, onLoad)
 
-		var normEnc = meshMeta.normalEncoding;
+    },
 
-		var vertIntsX = new Uint16Array( currNumVerts );
-		var vertIntsY = new Uint16Array( currNumVerts );
-		var vertIntsZ = new Uint16Array( currNumVerts );
-		var vertNormsX = new Uint16Array( currNumVerts );
-		var vertNormsY, vertNormsZ;
-		if ( normEnc == "octahedral" || normEnc == "quantisation" ) 
-			vertNormsY = new Uint16Array( currNumVerts );
-		if ( normEnc == "quantisation" )
-			vertNormsZ = new Uint16Array( currNumVerts );
-		var vertCoordsU = new Uint32Array( currNumVerts );
-		var vertCoordsV = new Uint32Array( currNumVerts );
-		var indexArray = new Uint32Array( currNumIndices );
+    parseOneMeshData: function(data, meshMeta, meshObjects) {
 
-		
-		//set offset
-		var b128Offset = this.sourceFileOffset;
-		
-		//progressive currently doesn't
-		if (this.newFile){
+        var newBuffers = {};
+        var aabbMin = meshMeta.AABB.min;
+        var aabbRange = meshMeta.AABB.range;
+        var currNumVerts = meshMeta.vertices;
+        var currNumIndices = meshMeta.indexBufferSize;
+        var utfIndexBuffer = meshMeta.utfIndexBuffer;
 
-			b128Offset = 0;
-			this.sourceFileOffset = 0; 	
-			this.newFile = false;
-		
-		}
+        var normEnc = meshMeta.normalEncoding;
 
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+        var vertIntsX = new Uint16Array(currNumVerts);
+        var vertIntsY = new Uint16Array(currNumVerts);
+        var vertIntsZ = new Uint16Array(currNumVerts);
+        var vertNormsX = new Uint16Array(currNumVerts);
+        var vertNormsY, vertNormsZ;
+        if (normEnc == "octahedral" || normEnc == "quantisation")
+            vertNormsY = new Uint16Array(currNumVerts);
+        if (normEnc == "quantisation")
+            vertNormsZ = new Uint16Array(currNumVerts);
+        var vertCoordsU = new Uint32Array(currNumVerts);
+        var vertCoordsV = new Uint32Array(currNumVerts);
+        var indexArray = new Uint32Array(currNumIndices);
 
-			vertIntsX[ i ] = data[ b128Offset ];b128Offset ++;
 
-		}
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+        //set offset
+        var b128Offset = this.sourceFileOffset;
 
-			vertIntsY[ i ] = data[ b128Offset ];b128Offset ++
+        //progressive currently doesn't
+        if (this.newFile) {
 
-		}
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+            b128Offset = 0;
+            this.sourceFileOffset = 0;
+            this.newFile = false;
 
-			vertIntsZ[ i ] = data[ b128Offset ];b128Offset ++
+        }
 
-		}
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+        for (var i = 0; i < currNumVerts; i++) {
 
-			vertNormsX[ i ] = data[ b128Offset ];b128Offset ++
+            vertIntsX[i] = data[b128Offset];
+            b128Offset++;
 
-		}
-		if ( normEnc == "octahedral" || normEnc == "quantisation" )
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+        }
+        for (var i = 0; i < currNumVerts; i++) {
 
-			vertNormsY[ i ] = data[ b128Offset ];b128Offset ++
+            vertIntsY[i] = data[b128Offset];
+            b128Offset++
 
-		}
-		if ( normEnc == "quantisation" )
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+        }
+        for (var i = 0; i < currNumVerts; i++) {
 
-			vertNormsZ[ i ] = data[ b128Offset ];b128Offset ++
+            vertIntsZ[i] = data[b128Offset];
+            b128Offset++
 
-		}
-		if ( ! meshMeta.skipTexture ) {
+        }
+        for (var i = 0; i < currNumVerts; i++) {
 
-			for ( var i = 0; i < currNumVerts; i ++ ) {
+            vertNormsX[i] = data[b128Offset];
+            b128Offset++
 
-				vertCoordsU[ i ] = data[ b128Offset ];b128Offset ++
+        }
+        if (normEnc == "octahedral" || normEnc == "quantisation")
+            for (var i = 0; i < currNumVerts; i++) {
 
-			}
-			for ( var i = 0; i < currNumVerts; i ++ ) {
+                vertNormsY[i] = data[b128Offset];
+                b128Offset++
 
-				vertCoordsV[ i ] = data[ b128Offset ];b128Offset ++
+            }
+        if (normEnc == "quantisation")
+            for (var i = 0; i < currNumVerts; i++) {
 
-			}
+                vertNormsZ[i] = data[b128Offset];
+                b128Offset++
 
-		}
-		for ( var i = 0; i < currNumIndices; i ++ ) {
+            }
+        if (!meshMeta.skipTexture) {
 
-			indexArray[ i ] = data[ b128Offset ];b128Offset ++;
+            for (var i = 0; i < currNumVerts; i++) {
 
-		}
+                vertCoordsU[i] = data[b128Offset];
+                b128Offset++
 
-		//reset offset
-		this.sourceFileOffset = b128Offset;
+            }
+            for (var i = 0; i < currNumVerts; i++) {
 
+                vertCoordsV[i] = data[b128Offset];
+                b128Offset++
 
-		newBuffers.vertices = new Float32Array( currNumVerts * 3 );
-		var delta = 0; var lastIndexX = 0; var lastIndexY = 0; var lastIndexZ = 0;
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+            }
 
-			//x
-			delta = this.decodeInterleavedInt( vertIntsX[ i ] );
-			newVal = lastIndexX + delta;
-			lastIndexX = newVal;
-			// newBuffers.vertices[i*3] = newVal;
-			newBuffers.vertices[ i * 3 ] =
-			( newVal / meshMeta.wValues.vertex.x ) * meshMeta.AABB.range[ 0 ] + meshMeta.AABB.min[ 0 ];
+        }
+        for (var i = 0; i < currNumIndices; i++) {
 
-		}
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+            indexArray[i] = data[b128Offset];
+            b128Offset++;
 
-			//y
-			delta = this.decodeInterleavedInt( vertIntsY[ i ] );
-			newVal = lastIndexY + delta;
-			lastIndexY = newVal;
-			// newBuffers.vertices[i*3+1] = newVal
-			newBuffers.vertices[ i * 3 + 1 ] =
-			( newVal / meshMeta.wValues.vertex.y ) * meshMeta.AABB.range[ 1 ] + meshMeta.AABB.min[ 1 ];
+        }
 
-		}
-		for ( var i = 0; i < currNumVerts; i ++ ) {
+        //reset offset
+        this.sourceFileOffset = b128Offset;
 
-			//z
-			delta = this.decodeInterleavedInt( vertIntsZ[ i ] );
-			newVal = lastIndexZ + delta;
-			lastIndexZ = newVal;
-			// newBuffers.vertices[i*3+2] = newVal;
-			newBuffers.vertices[ i * 3 + 2 ] =
-			( newVal / meshMeta.wValues.vertex.z ) * meshMeta.AABB.range[ 2 ] + meshMeta.AABB.min[ 2 ];
 
-		}
+        newBuffers.vertices = new Float32Array(currNumVerts * 3);
+        var delta = 0;
+        var lastIndexX = 0;
+        var lastIndexY = 0;
+        var lastIndexZ = 0;
+        for (var i = 0; i < currNumVerts; i++) {
 
-		//normals
+            //x
+            delta = this.decodeInterleavedInt(vertIntsX[i]);
+            newVal = lastIndexX + delta;
+            lastIndexX = newVal;
+            // newBuffers.vertices[i*3] = newVal;
+            newBuffers.vertices[i * 3] =
+                (newVal / meshMeta.wValues.vertex.x) * meshMeta.AABB.range[0] + meshMeta.AABB.min[0];
 
-		newBuffers.normals = new Float32Array( currNumVerts * 3 );
-		lastIndexX = 0; lastIndexY = 0; lastIndexZ = 0;
+        }
+        for (var i = 0; i < currNumVerts; i++) {
 
-		var fibIndex = 0; var decodedNormal;
-		if ( normEnc == "fibonacci" ) {
+            //y
+            delta = this.decodeInterleavedInt(vertIntsY[i]);
+            newVal = lastIndexY + delta;
+            lastIndexY = newVal;
+            // newBuffers.vertices[i*3+1] = newVal
+            newBuffers.vertices[i * 3 + 1] =
+                (newVal / meshMeta.wValues.vertex.y) * meshMeta.AABB.range[1] + meshMeta.AABB.min[1];
 
-			//create fibonacci sphere if required
-			var fibSphere = this.computeFibonacci_sphere( meshMeta.fibonacciLevel );
-			for ( var i = 0; i < currNumVerts; i ++ ) {
+        }
+        for (var i = 0; i < currNumVerts; i++) {
 
-				//there is only one coordinate, which is the sphere index
-				delta = this.decodeInterleavedInt( vertNormsX[ i ] );
-				lastIndexX = lastIndexX + delta;
-				newBuffers.normals[ i * 3 ] = fibSphere[ lastIndexX * 3 ];
-				newBuffers.normals[ i * 3 + 1 ] = fibSphere[ lastIndexX * 3 + 1 ];
-				newBuffers.normals[ i * 3 + 2 ] = fibSphere[ lastIndexX * 3 + 2 ];
+            //z
+            delta = this.decodeInterleavedInt(vertIntsZ[i]);
+            newVal = lastIndexZ + delta;
+            lastIndexZ = newVal;
+            // newBuffers.vertices[i*3+2] = newVal;
+            newBuffers.vertices[i * 3 + 2] =
+                (newVal / meshMeta.wValues.vertex.z) * meshMeta.AABB.range[2] + meshMeta.AABB.min[2];
 
-			}
+        }
 
-		}
+        //normals
 
-		else if ( normEnc == "octahedral" ) {
+        newBuffers.normals = new Float32Array(currNumVerts * 3);
+        lastIndexX = 0;
+        lastIndexY = 0;
+        lastIndexZ = 0;
 
-			for ( var i = 0; i < currNumVerts; i ++ ) {
+        var fibIndex = 0;
+        var decodedNormal;
+        if (normEnc == "fibonacci") {
 
-				//x
-				delta = this.decodeInterleavedInt( vertNormsX[ i ] );
-				lastIndexX = lastIndexX + delta;
-				//y
-				delta = this.decodeInterleavedInt( vertNormsY[ i ] );
-				lastIndexY = lastIndexY + delta;
-				//decode
-				decodedNormal = this.octDecode( lastIndexX, lastIndexY );
-				newBuffers.normals[ i * 3 ] = decodedNormal[ 0 ];
-				newBuffers.normals[ i * 3 + 1 ] = decodedNormal[ 1 ];
-				newBuffers.normals[ i * 3 + 2 ] = decodedNormal[ 2 ];
+            //create fibonacci sphere if required
+            var fibSphere = this.computeFibonacci_sphere(meshMeta.fibonacciLevel);
+            for (var i = 0; i < currNumVerts; i++) {
 
-			}
+                //there is only one coordinate, which is the sphere index
+                delta = this.decodeInterleavedInt(vertNormsX[i]);
+                lastIndexX = lastIndexX + delta;
+                newBuffers.normals[i * 3] = fibSphere[lastIndexX * 3];
+                newBuffers.normals[i * 3 + 1] = fibSphere[lastIndexX * 3 + 1];
+                newBuffers.normals[i * 3 + 2] = fibSphere[lastIndexX * 3 + 2];
 
-		}
-		else if ( normEnc == "quantisation" ) {
+            }
 
-			for ( var i = 0; i < currNumVerts; i ++ ) {
+        } else if (normEnc == "octahedral") {
 
-				//x
-				delta = this.decodeInterleavedInt( vertNormsX[ i ] );
-				lastIndexX = lastIndexX + delta;
-				newBuffers.normals[ i * 3 ] = ( lastIndexX / ( meshMeta.wValues.normal - 1.0 ) ) * 2.0 - 1.0;
-				//y
-				delta = this.decodeInterleavedInt( vertNormsY[ i ] );
-				lastIndexY = lastIndexY + delta;
-				newBuffers.normals[ i * 3 + 1 ] = ( lastIndexY / ( meshMeta.wValues.normal - 1.0 ) ) * 2.0 - 1.0;;
-				//z
-				delta = this.decodeInterleavedInt( vertNormsZ[ i ] );
-				lastIndexZ = lastIndexZ + delta;
-				newBuffers.normals[ i * 3 + 2 ] = ( lastIndexZ / ( meshMeta.wValues.normal - 1.0 ) ) * 2.0 - 1.0;
+            for (var i = 0; i < currNumVerts; i++) {
 
-			}
+                //x
+                delta = this.decodeInterleavedInt(vertNormsX[i]);
+                lastIndexX = lastIndexX + delta;
+                //y
+                delta = this.decodeInterleavedInt(vertNormsY[i]);
+                lastIndexY = lastIndexY + delta;
+                //decode
+                decodedNormal = this.octDecode(lastIndexX, lastIndexY);
+                newBuffers.normals[i * 3] = decodedNormal[0];
+                newBuffers.normals[i * 3 + 1] = decodedNormal[1];
+                newBuffers.normals[i * 3 + 2] = decodedNormal[2];
 
-		}
+            }
 
+        } else if (normEnc == "quantisation") {
 
+            for (var i = 0; i < currNumVerts; i++) {
 
-		if ( ! meshMeta.skipTexture ) {
+                //x
+                delta = this.decodeInterleavedInt(vertNormsX[i]);
+                lastIndexX = lastIndexX + delta;
+                newBuffers.normals[i * 3] = (lastIndexX / (meshMeta.wValues.normal - 1.0)) * 2.0 - 1.0;
+                //y
+                delta = this.decodeInterleavedInt(vertNormsY[i]);
+                lastIndexY = lastIndexY + delta;
+                newBuffers.normals[i * 3 + 1] = (lastIndexY / (meshMeta.wValues.normal - 1.0)) * 2.0 - 1.0;;
+                //z
+                delta = this.decodeInterleavedInt(vertNormsZ[i]);
+                lastIndexZ = lastIndexZ + delta;
+                newBuffers.normals[i * 3 + 2] = (lastIndexZ / (meshMeta.wValues.normal - 1.0)) * 2.0 - 1.0;
 
-			lastIndexU = 0; lastIndexV = 0;
-			newBuffers.coords = new Float32Array( currNumVerts * 2 );
-			for ( var i = 0; i < currNumVerts; i ++ ) {
+            }
 
-				//u
-				delta = this.decodeInterleavedInt( vertCoordsU[ i ] );
-				lastIndexU = lastIndexU + delta;
-				//v
-				delta = this.decodeInterleavedInt( vertCoordsV[ i ] );
-				lastIndexV = lastIndexV + delta;
-				//set
-				newBuffers.coords[ i * 2 + 1 ] = lastIndexV / meshMeta.wValues.texture;
-				newBuffers.coords[ i * 2 ] = lastIndexU / meshMeta.wValues.texture;
+        }
 
-			}
 
 
-		}
+        if (!meshMeta.skipTexture) {
 
-		newBuffers.triangles = new Uint32Array( utfIndexBuffer );
+            lastIndexU = 0;
+            lastIndexV = 0;
+            newBuffers.coords = new Float32Array(currNumVerts * 2);
+            for (var i = 0; i < currNumVerts; i++) {
 
-		lastIndex = 0;
-		if ( ! meshMeta.max_step )
-		meshMeta.max_step = 1;
-		nextHighWaterMark = meshMeta.max_step - 1;
-		hi = meshMeta.max_step - 1;
-		triCounter = 0;
-		var prev = 0;
-		var result = 0;
-		var v = 0;
-		for ( var i = 0; i < utfIndexBuffer; i ++ ) //
-		{
+                //u
+                delta = this.decodeInterleavedInt(vertCoordsU[i]);
+                lastIndexU = lastIndexU + delta;
+                //v
+                delta = this.decodeInterleavedInt(vertCoordsV[i]);
+                lastIndexV = lastIndexV + delta;
+                //set
+                newBuffers.coords[i * 2 + 1] = lastIndexV / meshMeta.wValues.texture;
+                newBuffers.coords[i * 2] = lastIndexU / meshMeta.wValues.texture;
 
-			if ( meshMeta.indexCoding == "delta" ) {
+            }
 
-				//delta decoding
-				result = this.decodeInterleavedInt( indexArray[ i ] );
-				prev += result;
-				newBuffers.triangles[ triCounter ++ ] = prev;
 
-			} else {
+        }
 
-				//highwatermark
-				v = indexArray[ i ];
-				v = hi - v;
-				newBuffers.triangles[ triCounter ++ ] = v;
-				hi = Math.max( hi, v + meshMeta.max_step );
+        newBuffers.triangles = new Uint32Array(utfIndexBuffer);
 
-			}
+        lastIndex = 0;
+        if (!meshMeta.max_step)
+            meshMeta.max_step = 1;
+        nextHighWaterMark = meshMeta.max_step - 1;
+        hi = meshMeta.max_step - 1;
+        triCounter = 0;
+        var prev = 0;
+        var result = 0;
+        var v = 0;
+        for (var i = 0; i < utfIndexBuffer; i++) //
+        {
 
-		}
+            if (meshMeta.indexCoding == "delta") {
 
-		if ( meshMeta.indexCompression == "pairedtris" ) {
+                //delta decoding
+                result = this.decodeInterleavedInt(indexArray[i]);
+                prev += result;
+                newBuffers.triangles[triCounter++] = prev;
 
-			newArray = new Uint32Array( meshMeta.faces * 3 );
-			var nACounter = 0;
-			for ( var base = 0; base < newBuffers.triangles.length; ) {
+            } else {
 
-				//
-				var a = newBuffers.triangles[ base ++ ];
-				var b = newBuffers.triangles[ base ++ ];
-				var c = newBuffers.triangles[ base ++ ];
-				newArray[ nACounter ++ ] = a;
-				newArray[ nACounter ++ ] = b;
-				newArray[ nACounter ++ ] = c;
+                //highwatermark
+                v = indexArray[i];
+                v = hi - v;
+                newBuffers.triangles[triCounter++] = v;
+                hi = Math.max(hi, v + meshMeta.max_step);
 
-				if ( a < b ) {
+            }
 
-					var d = newBuffers.triangles[ base ++ ];
-					newArray[ nACounter ++ ] = a;
-					newArray[ nACounter ++ ] = d;
-					newArray[ nACounter ++ ] = b;
+        }
 
-				}
+        if (meshMeta.indexCompression == "pairedtris") {
 
-			}
-			newBuffers.triangles = newArray;
+            newArray = new Uint32Array(meshMeta.faces * 3);
+            var nACounter = 0;
+            for (var base = 0; base < newBuffers.triangles.length;) {
 
-		}
+                //
+                var a = newBuffers.triangles[base++];
+                var b = newBuffers.triangles[base++];
+                var c = newBuffers.triangles[base++];
+                newArray[nACounter++] = a;
+                newArray[nACounter++] = b;
+                newArray[nACounter++] = c;
 
-		var object;
+                if (a < b) {
 
-		object = {
-			name: meshMeta.name,
-			geometry: newBuffers,
-			mat_id: meshMeta.mat_id,
-			reconstructNormals: meshMeta.reconstructNormals
-		};
+                    var d = newBuffers.triangles[base++];
+                    newArray[nACounter++] = a;
+                    newArray[nACounter++] = d;
+                    newArray[nACounter++] = b;
 
-		meshObjects.push( object );
+                }
 
-		console.log( "Parsed object " + meshMeta.name + ": " + meshObjects.length );
+            }
+            newBuffers.triangles = newArray;
 
-	},
+        }
 
-	createTHREEMeshes: function( meshObjects, onLoad ) {
+        var object;
 
-		var container = new THREE.Object3D();
+        object = {
+            name: meshMeta.name,
+            geometry: newBuffers,
+            mat_id: meshMeta.mat_id,
+            reconstructNormals: meshMeta.reconstructNormals
+        };
 
-		for ( var i = 0, l = meshObjects.length; i < l; i ++ ) {
+        meshObjects.push(object);
 
-			//assign geometry
-			object = meshObjects[ i ];
-			geometry = object.geometry;
+        console.log("Parsed object " + meshMeta.name + ": " + meshObjects.length);
 
-			var buffergeometry = new THREE.BufferGeometry();
+    },
 
-			buffergeometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( object.geometry.vertices ), 3 ) );
+    createTHREEMeshes: function(meshObjects, onLoad) {
 
+        var container = new THREE.Object3D();
 
-			if ( object.geometry.coords && object.geometry.coords.length > 0 ) {
+        for (var i = 0, l = meshObjects.length; i < l; i++) {
 
-				buffergeometry.addAttribute( 'uv', new THREE.BufferAttribute( new Float32Array( object.geometry.coords ), 2 ) );
+            //assign geometry
+            object = meshObjects[i];
+            geometry = object.geometry;
 
-			}
+            var buffergeometry = new THREE.BufferGeometry();
 
-			if ( object.geometry.triangles && object.geometry.triangles.length > 0 ) {
+            buffergeometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(object.geometry.vertices), 3));
 
-				buffergeometry.setIndex( new THREE.BufferAttribute( object.geometry.triangles, 1 ) )
 
-			}
+            if (object.geometry.coords && object.geometry.coords.length > 0) {
 
+                buffergeometry.addAttribute('uv', new THREE.BufferAttribute(new Float32Array(object.geometry.coords), 2));
 
-			if ( object.reconstructNormals == true || object.geometry.normals.length == 0 ) {
+            }
 
-				buffergeometry.computeFaceNormals();
-				buffergeometry.computeVertexNormals();
+            if (object.geometry.triangles && object.geometry.triangles.length > 0) {
 
-			}
-			else {
+                buffergeometry.setIndex(new THREE.BufferAttribute(object.geometry.triangles, 1))
 
-				buffergeometry.addAttribute( 'normal', new THREE.BufferAttribute( new Float32Array( object.geometry.normals ), 3 ) );
+            }
 
-			}
 
-			//create mesh object
-			var mesh = new THREE.Mesh( buffergeometry );
-			mesh.name = object.name; //TODO assign objects a name
+            if (object.reconstructNormals == true || object.geometry.normals.length == 0) {
 
-			//assign material if it exists, if not assign a default Phong material
-			if ( object.mat_id != - 1 )
-				mesh.material = this.materials[ object.mat_id ];
-			else
-				mesh.material = new THREE.MeshPhongMaterial( { color: 0xdddddd, specular: 0xCCCC99, shininess: 30 } );
+                buffergeometry.computeFaceNormals();
+                buffergeometry.computeVertexNormals();
 
-			mesh.geometry.computeBoundingSphere();
+            } else {
 
-			//add to generic container
-			container.add( mesh );
+                buffergeometry.addAttribute('normal', new THREE.BufferAttribute(new Float32Array(object.geometry.normals), 3));
 
-		}
-		console.timeEnd( 'B128Loader' );
+            }
 
-		//this.container = container;
+            //create mesh object
+            var mesh = new THREE.Mesh(buffergeometry);
+            mesh.name = object.name; //TODO assign objects a name
 
-		if ( onLoad )
-			onLoad( container );
+            //assign material if it exists, if not assign a default Phong material
+            if (object.mat_id != -1)
+                mesh.material = this.materials[object.mat_id];
+            else
+                mesh.material = new THREE.MeshPhongMaterial({
+                    color: 0xdddddd,
+                    specular: 0xCCCC99,
+                    shininess: 30
+                });
 
-	},
+            mesh.geometry.computeBoundingSphere();
 
-	createTHREEMaterials: function(jsonMaterials) {
+            //add to generic container
+            container.add(mesh);
 
-		this.materials = [];
-		for ( var i = 0; i < jsonMaterials.length; i ++ ) {
+        }
+        console.timeEnd('B128Loader');
 
-			var currMat = jsonMaterials[ i ];
-			var threeMat;
+        //this.container = container;
 
-			//check that we need the material to be illuminated
-			if ( this.options.material == "basic" )
-				threeMat = new THREE.MeshBasicMaterial();
-			else
-				threeMat = new THREE.MeshPhongMaterial();
+        if (onLoad)
+            onLoad(container);
 
-			if ( currMat.name != "" )
-				threeMat.name = currMat.name;
+    },
 
-			//diffuse color
-			if ( ( c = currMat.Kd ) != "" ) {
+    createTHREEMaterials: function(jsonMaterials) {
 
-				if ( c[ 0 ] == 0 && c[ 1 ] == 0 && c[ 2 ] == 0 ) {
+        this.materials = [];
+        for (var i = 0; i < jsonMaterials.length; i++) {
 
-					threeMat.color = new THREE.Color( 1, 1, 1 );
-					console.warn( "THREE.B128Loader: The material has no diffuse color, substituting 1..." )
+            var currMat = jsonMaterials[i];
+            var threeMat;
 
-				}
-				else {
+            //check that we need the material to be illuminated
+            if (currMat.type === "basic" || this.options.material == "basic") {
+                this.options.material = "basic"; // make sure this is set
+                threeMat = new THREE.MeshBasicMaterial();
+            } else {
+                threeMat = new THREE.MeshPhongMaterial();
+            }
 
-					threeMat.color = new THREE.Color( c[ 0 ], c[ 1 ], c[ 2 ] );
+            if (currMat.name != "")
+                threeMat.name = currMat.name;
 
-				}
+            //diffuse color
+            if ((c = currMat.Kd) != "") {
 
-			}
+                if (c[0] == 0 && c[1] == 0 && c[2] == 0) {
 
-			//diffuse color map
-			if (currMat.map_Kd && currMat.map_Kd != "") {
+                    threeMat.color = new THREE.Color(1, 1, 1);
+                    console.warn("THREE.B128Loader: The material has no diffuse color, substituting 1...")
 
-				//check it doesn't have a url ruining leading slash
-				currMat.map_Kd = currMat.map_Kd.replace(/^\//g, '');
+                } else {
 
+                    threeMat.color = new THREE.Color(c[0], c[1], c[2]);
 
-				threeMat.map = THREE.ImageUtils.loadTexture(
-					this.filepath + currMat.map_Kd,
-					THREE.UVMapping,
-					function( tex ) {
+                }
 
-						tex.wrapS = THREE.MirroredRepeatWrapping;
-						tex.wrapT = THREE.MirroredRepeatWrapping;
+            }
 
-					}
-				);
+            //diffuse color map
+            if (currMat.map_Kd && currMat.map_Kd != "") {
 
-			}
+                //check it doesn't have a url ruining leading slash
+                currMat.map_Kd = currMat.map_Kd.replace(/^\//g, '');
 
-			//bump map
-			if (currMat.map_bump && currMat.map_bump != "") {
 
-				//check it doesn't have a url ruining leading slash
-				currMat.map_bump = currMat.map_bump.replace(/^\//g, '');
+                threeMat.map = THREE.ImageUtils.loadTexture(
+                    this.filepath + currMat.map_Kd,
+                    THREE.UVMapping,
+                    function(tex) {
 
-				//we need to check for the -bm <var> <filename> format first
-				var spl = currMat.map_bump.split( " " );
-				var bumpFileName;
-				if ( spl[ 0 ] == "-bm" ) {
+                        tex.wrapS = THREE.MirroredRepeatWrapping;
+                        tex.wrapT = THREE.MirroredRepeatWrapping;
 
-					bumpFileName = spl[ 2 ];
-					threeMat.bumpScale = parseFloat( spl[ 1 ] );
+                    }
+                );
 
-				} else {
+            }
 
-					bumpFileName = spl[ 0 ];
+            // exit early for basic material, as we don't want to break threejs
+            if (this.options.material == "basic") {
+                this.materials.push(threeMat);
+                continue;
+            }
 
-				}
-				threeMat.bumpMap = THREE.ImageUtils.loadTexture(
-					this.filepath + bumpFileName,
-					THREE.UVMapping,
-					function( tex ) {
+            //continue only if we have a phong material
 
-						tex.wrapS = THREE.MirroredRepeatWrapping;
-						tex.wrapT = THREE.MirroredRepeatWrapping;
+            //bump map
+            if (currMat.map_bump && currMat.map_bump != "") {
 
-					}
-				);
+                //check it doesn't have a url ruining leading slash
+                currMat.map_bump = currMat.map_bump.replace(/^\//g, '');
 
-			}
+                //we need to check for the -bm <var> <filename> format first
+                var spl = currMat.map_bump.split(" ");
+                var bumpFileName;
+                if (spl[0] == "-bm") {
 
-			//specular map
-			if ( currMat.map_Ks != "" ) {
+                    bumpFileName = spl[2];
+                    threeMat.bumpScale = parseFloat(spl[1]);
 
-				threeMat.specularMap = THREE.ImageUtils.loadTexture(
-					this.filepath + currMat.map_Ks,
-					THREE.UVMapping,
-					function( tex ) {
+                } else {
 
-						tex.wrapS = THREE.MirroredRepeatWrapping;
-						tex.wrapT = THREE.MirroredRepeatWrapping;
+                    bumpFileName = spl[0];
 
-					}
-				);
+                }
+                threeMat.bumpMap = THREE.ImageUtils.loadTexture(
+                    this.filepath + bumpFileName,
+                    THREE.UVMapping,
+                    function(tex) {
 
-			}
+                        tex.wrapS = THREE.MirroredRepeatWrapping;
+                        tex.wrapT = THREE.MirroredRepeatWrapping;
 
-			if ( ( c = currMat.Ke ) != "" ) //emmissive color
-				threeMat.emissive = new THREE.Color( c[ 0 ], c[ 1 ], c[ 2 ] );
-			if ( ( c = currMat.Ks ) != "" ) //specular color
-				threeMat.specular = new THREE.Color( c[ 0 ], c[ 1 ], c[ 2 ] );
-			if ( ( c = currMat.Ns ) != "" ) //specular factor
-				threeMat.shininess = c;
+                    }
+                );
 
-			// UNSUPPORTED .MTL PROPERTIES
-			//-----------------------
-			// Ni is optical density
-			// Ka - there is no per material ambient in three js
-			// Tr is transmittance
-			// dissolve
-			// illum
-			// map_Ka = ambient reflectivity map
+            }
 
-			//TODO
-			if ( this.options.material == "basic" )	{
+            //specular map
+            if (currMat.map_Ks != "") {
 
-			}
+                threeMat.specularMap = THREE.ImageUtils.loadTexture(
+                    this.filepath + currMat.map_Ks,
+                    THREE.UVMapping,
+                    function(tex) {
 
-			this.materials.push( threeMat );
+                        tex.wrapS = THREE.MirroredRepeatWrapping;
+                        tex.wrapT = THREE.MirroredRepeatWrapping;
 
-		}
+                    }
+                );
 
-	},
+            }
 
-	splitPath: function( path ) {
+            if ((c = currMat.Ke) != "") //emmissive color
+                threeMat.emissive = new THREE.Color(c[0], c[1], c[2]);
+            if ((c = currMat.Ks) != "") //specular color
+                threeMat.specular = new THREE.Color(c[0], c[1], c[2]);
+            if ((c = currMat.Ns) != "") //specular factor
+                threeMat.shininess = c;
 
-		var dirPart, filePart;
-		path.replace( /^(.*\/)?([^/]*)$/, function( _, dir, file ) {
+            // UNSUPPORTED .MTL PROPERTIES
+            //-----------------------
+            // Ni is optical density
+            // Ka - there is no per material ambient in three js
+            // Tr is transmittance
+            // dissolve
+            // illum
+            // map_Ka = ambient reflectivity map
 
-			dirPart = dir; filePart = file;
 
-		} );
 
-		if ( typeof dirPart == 'undefined' ){
+            this.materials.push(threeMat);
 
-			dirPart = "";
+        }
 
-		}
-		return { dirPart: dirPart, filePart: filePart };
+    },
 
-	},
+    splitPath: function(path) {
 
-	decodeInterleavedInt: function( val ) {
+        var dirPart, filePart;
+        path.replace(/^(.*\/)?([^/]*)$/, function(_, dir, file) {
 
-		if ( val % 2 == 0 )
-		return - 1 * ( val / 2 )
-		else
-		return ( ( val - 1 ) / 2 ) + 1
+            dirPart = dir;
+            filePart = file;
 
-	},
+        });
 
-	fromSNorm: function( value ) {
+        if (typeof dirPart == 'undefined') {
 
-		return Math.clamp( value, 0.0, 255.0 ) / 255.0 * 2.0 - 1.0;
+            dirPart = "";
 
-	},
+        }
+        return {
+            dirPart: dirPart,
+            filePart: filePart
+        };
 
-	signNotZero: function( value ) {
+    },
 
-		return value < 0.0 ? - 1.0 : 1.0;
+    decodeInterleavedInt: function(val) {
 
-	},
+        if (val % 2 == 0)
+            return -1 * (val / 2)
+        else
+            return ((val - 1) / 2) + 1
 
-	octDecode: function( x, y ) {
+    },
 
-		var theX = this.fromSNorm( x );
-		var theY = this.fromSNorm( y );
-		var theZ = 1.0 - ( Math.abs( theX ) + Math.abs( theY ) );
+    fromSNorm: function(value) {
 
-		var result = [ theX, theY, theZ ];
+        return Math.clamp(value, 0.0, 255.0) / 255.0 * 2.0 - 1.0;
 
-		if ( result[ 2 ] < 0.0 ) {
+    },
 
-			var oldVX = result[ 0 ];
-			result[ 0 ] = ( 1.0 - Math.abs( result[ 1 ] ) ) * this.signNotZero( oldVX );
-			result[ 1 ] = ( 1.0 - Math.abs( oldVX ) ) * this.signNotZero( result[ 1 ] );
+    signNotZero: function(value) {
 
-		}
-		//normalize
-		var len = Math.sqrt( result[ 0 ] * result[ 0 ] + result[ 1 ] * result[ 1 ] + result[ 2 ] * result[ 2 ] );
-		result[ 0 ] /= len; result[ 1 ] /= len; result[ 2 ] /= len;
-		return result;
+        return value < 0.0 ? -1.0 : 1.0;
 
-	},
+    },
 
-	computeFibonacci_sphere: function( samples ) {
+    octDecode: function(x, y) {
 
-		var rnd = 1.0;
-		var points = [];
-		var offset = 2.0 / samples;
-		var increment = Math.PI * ( 3.0 - Math.sqrt( 5.0 ) );
-		
-		for ( var i = 0; i < samples; i ++ ) {
+        var theX = this.fromSNorm(x);
+        var theY = this.fromSNorm(y);
+        var theZ = 1.0 - (Math.abs(theX) + Math.abs(theY));
 
-			var y = ( ( i * offset ) - 1 ) + ( offset / 2 );
-			var r = Math.sqrt( 1 - Math.pow( y, 2 ) );
+        var result = [theX, theY, theZ];
 
-			var phi = ( ( i + rnd ) % samples ) * increment;
+        if (result[2] < 0.0) {
 
-			var x = Math.cos( phi ) * r;
-			var z = Math.sin( phi ) * r;
+            var oldVX = result[0];
+            result[0] = (1.0 - Math.abs(result[1])) * this.signNotZero(oldVX);
+            result[1] = (1.0 - Math.abs(oldVX)) * this.signNotZero(result[1]);
 
-			points.push( x );
-			points.push( y );
-			points.push( z );
+        }
+        //normalize
+        var len = Math.sqrt(result[0] * result[0] + result[1] * result[1] + result[2] * result[2]);
+        result[0] /= len;
+        result[1] /= len;
+        result[2] /= len;
+        return result;
 
-		}
+    },
 
-		return points;
+    computeFibonacci_sphere: function(samples) {
 
-	}
+        var rnd = 1.0;
+        var points = [];
+        var offset = 2.0 / samples;
+        var increment = Math.PI * (3.0 - Math.sqrt(5.0));
+
+        for (var i = 0; i < samples; i++) {
+
+            var y = ((i * offset) - 1) + (offset / 2);
+            var r = Math.sqrt(1 - Math.pow(y, 2));
+
+            var phi = ((i + rnd) % samples) * increment;
+
+            var x = Math.cos(phi) * r;
+            var z = Math.sin(phi) * r;
+
+            points.push(x);
+            points.push(y);
+            points.push(z);
+
+        }
+
+        return points;
+
+    }
 
 };
 
-( function() {
+(function() {
 
-	Math.clamp = function( a, b, c ) {
+    Math.clamp = function(a, b, c) {
 
-		return Math.max( b, Math.min( c, a ) );
+        return Math.max(b, Math.min(c, a));
 
-	}
+    }
 
-} )();
+})();
